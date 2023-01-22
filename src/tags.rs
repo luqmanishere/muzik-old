@@ -1,8 +1,7 @@
-use std::{fs::File, io::Cursor, path::PathBuf};
+use std::{io::Cursor, path::PathBuf};
 
 use eyre::{eyre, Result};
 use lofty::{ItemKey, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
-use tempfile::tempdir;
 use tracing::error;
 
 use crate::database::Song;
@@ -66,16 +65,12 @@ pub async fn write_tags_async(path: PathBuf, song: &Song) -> Result<()> {
                 }
             }
 
-            /*
             if let Some(picture_url) = &song.tb_url {
                 if picture_url.contains("http") {
                     let picture = reqwest::get(picture_url).await;
                     match picture {
                         Ok(request) => {
                             let mut pict: Vec<u8> = vec![];
-                            //let img = image::io::Reader::new(Cursor::new(&request.bytes()?))
-                            //    .with_guessed_format()?
-                            //   .decode()?;
                             let pic = image::load_from_memory(&request.bytes().await?)?;
                             pic.write_to(&mut Cursor::new(&mut pict), image::ImageFormat::Png)?;
 
@@ -93,7 +88,6 @@ pub async fn write_tags_async(path: PathBuf, song: &Song) -> Result<()> {
                     }
                 }
             }
-                */
 
             for tag_item in tag_items {
                 tag.push_item(tag_item);
@@ -170,9 +164,6 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     match picture {
                         Ok(request) => {
                             let mut pict: Vec<u8> = vec![];
-                            //let img = image::io::Reader::new(Cursor::new(&request.bytes()?))
-                            //    .with_guessed_format()?
-                            //   .decode()?;
                             let pic = image::load_from_memory(&request.bytes()?)?;
                             pic.write_to(&mut Cursor::new(&mut pict), image::ImageFormat::Png)?;
 

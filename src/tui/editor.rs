@@ -3,13 +3,12 @@ use std::sync::mpsc::Sender;
 use cursive::{
     view::{Nameable, Resizable, Scrollable},
     views::{Dialog, EditView, LinearLayout, Panel, SelectView, TextView},
-    Cursive, View,
+    Cursive,
 };
-use tracing::{error, info};
 
 use crate::database::Song;
 
-use super::{event_runner::Event, EditState, State};
+use super::{event_runner::Event, State};
 
 pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayout {
     // TODO: rework this shit
@@ -60,12 +59,12 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     let select_song = Panel::new(select_song).title("Songs");
 
     let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
-    let tx_meta = tx.clone();
-    select_metadata.set_on_submit(move |siv: &mut Cursive, item: &String| {
+    let tx = tx;
+    select_metadata.set_on_submit(move |siv: &mut Cursive, _item: &String| {
         let user_data: &mut State = siv.user_data().unwrap();
         let song = user_data.current_selected_song.as_ref().unwrap().clone();
         // TODO: show editing prompt
-        let editor = editor_layer(siv, song, tx_meta.clone());
+        let editor = editor_layer(siv, song, tx.clone());
         siv.add_layer(editor);
     });
     let select_metadata = select_metadata.with_name("select_metadata");
@@ -117,21 +116,15 @@ fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
     .button("Ok", move |siv: &mut Cursive| {
         let mut song = song.clone();
         let title = siv
-            .call_on_name("editor_title", |view: &mut EditView| {
-                view.get_content().clone()
-            })
+            .call_on_name("editor_title", |view: &mut EditView| view.get_content())
             .unwrap()
             .to_string();
         let artist = siv
-            .call_on_name("editor_artist", |view: &mut EditView| {
-                view.get_content().clone()
-            })
+            .call_on_name("editor_artist", |view: &mut EditView| view.get_content())
             .unwrap()
             .to_string();
         let album = siv
-            .call_on_name("editor_album", |view: &mut EditView| {
-                view.get_content().clone()
-            })
+            .call_on_name("editor_album", |view: &mut EditView| view.get_content())
             .unwrap()
             .to_string();
 
@@ -164,7 +157,6 @@ pub fn update_database(siv: &mut Cursive) {
 
 pub fn delete_from_database(siv: &mut Cursive) {
     let user_data: &mut State = siv.user_data().unwrap();
-    let db = user_data.db.as_ref().unwrap();
     let mut song_list = user_data.song_list.clone().unwrap();
     let tx = user_data.tx.clone();
     siv.call_on_name("select_song", |view: &mut SelectView<usize>| {

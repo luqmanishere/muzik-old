@@ -226,7 +226,7 @@ async fn list_command() -> Result<()> {
 }
 
 async fn delete_command() -> Result<()> {
-    let mut db = Database::new("/home/luqman/Music/database.sqlite".into())?;
+    let db = Database::new("/home/luqman/Music/database.sqlite".into())?;
     let music_dir = PathBuf::from("/home/luqman/Music");
 
     if let Ok(songs) = db.get_all(music_dir.clone()) {

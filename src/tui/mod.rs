@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::mpsc::Sender};
 use cursive::{
     view::Nameable,
     views::{OnEventView, Panel},
-    Cursive, CursiveExt, View,
+    Cursive, CursiveExt,
 };
 use cursive_tabs::TabPanel;
 use directories_next::UserDirs;
@@ -46,7 +46,6 @@ pub fn run_tui() -> Result<()> {
         db,
         music_dir,
         song_list: None,
-        edit_state: EditState::None,
         song_index: None,
         tx: tx_us,
         current_selected_song: None,
@@ -76,16 +75,7 @@ struct State {
     db: Option<Database>,
     music_dir: PathBuf,
     song_list: Option<Vec<Song>>,
-    edit_state: EditState,
     song_index: Option<usize>,
     tx: Sender<Event>,
     current_selected_song: Option<Song>,
-}
-
-#[derive(Clone, Copy)]
-enum EditState {
-    Title,
-    Artist,
-    Album,
-    None,
 }

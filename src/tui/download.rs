@@ -13,26 +13,27 @@ use super::{
 };
 
 pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<LinearLayout> {
-    let ss_tx = tx.clone();
     let search_box = EditView::new().on_submit(move |siv: &mut Cursive, text: &str| {
         if !text.is_empty() {
-            ss_tx.send(Event::YoutubeSearch(text.to_string())).unwrap();
+            tx.send(Event::YoutubeSearch(text.to_string())).unwrap();
         } else {
             siv.add_layer(Dialog::text("Can't search for nothingness").dismiss_button("Dismiss"));
         }
     });
 
-    let vlayout = LinearLayout::vertical()
+    LinearLayout::vertical()
         .child(TextView::new("Search:"))
         .child(search_box)
-        .with_name("download_v_layout");
-    vlayout
+        .with_name("download_v_layout")
 }
 
 pub fn start_download(siv: &mut Cursive, song: &SingleVideo) {
     // Show popup to confirm
     let title = song.title.clone();
-    let channel = song.channel.clone().unwrap_or("Unknown".to_string());
+    let channel = song
+        .channel
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
     let song2 = song.clone();
     let confirm = Dialog::text(format!(
         "Title: {}\nChannel:{}\nConfirm? to edit?",
@@ -105,9 +106,9 @@ fn draw_metadata_editor(
                 .unwrap();
             tx.send(Event::YoutubeDownload(YoutubeDownloadOptions {
                 id,
-                title: title,
-                album: album,
-                artist: artist,
+                title,
+                album,
+                artist,
                 song: song.clone(),
                 music_dir,
             }))

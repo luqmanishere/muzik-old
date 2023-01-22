@@ -33,7 +33,7 @@ impl EventRunner {
         }
     }
 
-    pub fn process(&self) -> () {
+    pub fn process(&self) {
         match self.rx.recv().unwrap() {
             Event::YoutubeSearch(kw) => {
                 // TODO: add a searching notification
@@ -89,24 +89,17 @@ impl EventRunner {
                     .send(Box::new(move |siv: &mut Cursive| {
                         let popup = Dialog::text(format!(
                             "Downloading: {}: {}",
-                            title.clone(),
-                            artist.clone()
+                            title,
+                            artist
                         ))
                         .dismiss_button("Dismiss");
                         siv.add_layer(popup);
                     }))
                     .unwrap();
 
-                let filename_format = format!(
-                    "{} - {}.%(ext)s",
-                    dl_options.title.clone(),
-                    dl_options.artist.clone()
-                );
-                let filename = format!(
-                    "{} - {}.opus",
-                    dl_options.title.clone(),
-                    dl_options.artist.clone()
-                );
+                let filename_format =
+                    format!("{} - {}.%(ext)s", dl_options.title, dl_options.artist);
+                let filename = format!("{} - {}.opus", dl_options.title, dl_options.artist);
                 let filename = dl_options.music_dir.join(filename);
                 let _youtube = YoutubeDl::new(dl_options.id.clone())
                     .youtube_dl_path("yt-dlp")

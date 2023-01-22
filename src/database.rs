@@ -134,6 +134,7 @@ pub struct Song {
 }
 
 impl Song {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         music_dir: PathBuf,
         id: Option<usize>,
