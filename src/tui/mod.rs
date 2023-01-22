@@ -72,6 +72,7 @@ pub fn run_tui() -> Result<()> {
             .on_event('u', editor::update_database)
             .on_event('d', editor::delete_from_database)
             .on_event('V', editor::verify_all_song_integrity)
+            .on_event('R', editor::download_all_missing)
             .with_name("Editor"),
     );
     panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));

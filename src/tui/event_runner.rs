@@ -146,6 +146,7 @@ impl EventRunner {
             }
             Event::InsertTags(song) => {
                 let filename = song.path.as_ref().unwrap();
+                debug!("{}", &filename.display());
                 let title = song.title.clone().unwrap_or_default();
                 let artist = song.get_artists_string();
                 self.cb_sink
@@ -196,7 +197,7 @@ impl EventRunner {
                     self.cb_sink
                         .send(Box::new(move |siv: &mut Cursive| {
                             let status_text =
-                                format!("Done inserting tags for {} - {}", title, artist);
+                                format!("Done inserting into database for {} - {}", title, artist);
                             siv.call_on_all_named("statusbar", |view: &mut TextView| {
                                 view.set_content(&status_text)
                             });
@@ -311,7 +312,9 @@ impl EventRunner {
                         }
                         self.cb_sink
                             .send(Box::new(|siv: &mut Cursive| {
-                                let status_text = "done verifying integrity of all songs, check logs for info".to_string();
+                                let status_text =
+                                    "done verifying integrity of all songs, check logs for info"
+                                        .to_string();
                                 siv.call_on_all_named("statusbar", |view: &mut TextView| {
                                     view.set_content(&status_text)
                                 });
@@ -322,6 +325,69 @@ impl EventRunner {
                         error!("cant execute opusinfo: {}", e);
                     }
                 };
+            }
+            Event::DownloadAllMissingFromDatabase => {
+                let song_list = self
+                    .config
+                    .db
+                    .get_all(self.config.music_dir.clone())
+                    .wrap_err("failed to get song list")?;
+
+                for song in song_list {
+                    let path = song.path.as_ref().unwrap().clone();
+                    if !path.exists() {
+                        // TODO: download with metadata
+                        let title = song.title.clone().unwrap();
+                        let artist = song.get_artists_string();
+                        self.cb_sink
+                            .send(Box::new(move |siv: &mut Cursive| {
+                                let status_text = format!("Downloading: {}: {}", title, artist);
+                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                    view.set_content(&status_text)
+                                });
+                            }))
+                            .unwrap();
+
+                        let title = song.title.clone().unwrap();
+                        let artist = song.get_artists_string();
+                        let filename_format = format!("{} - {}.%(ext)s", title, artist);
+                        let filename_full = path.clone();
+                        let yt_id = song.yt_id.as_ref().unwrap().clone();
+                        let _youtube = YoutubeDl::new(yt_id)
+                            .youtube_dl_path("yt-dlp")
+                            .extra_arg("--audio-format")
+                            .extra_arg("opus")
+                            .extra_arg("--downloader")
+                            .extra_arg("aria2c")
+                            .extra_arg("--sponsorblock-remove")
+                            .extra_arg("all")
+                            .extra_arg("-P")
+                            .extra_arg(self.config.music_dir.display().to_string())
+                            .extra_arg("-o")
+                            .extra_arg(filename_format)
+                            .download(true)
+                            .extract_audio(true)
+                            .run()
+                            .unwrap();
+
+                        if filename_full.exists() {
+                            let title = song.title.clone().unwrap();
+                            let artist = song.get_artists_string();
+                            self.cb_sink
+                                .send(Box::new(move |siv: &mut Cursive| {
+                                    let status_text =
+                                        format!("Download finished for: {} - {}", title, artist);
+                                    siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                        view.set_content(&status_text)
+                                    });
+                                }))
+                                .unwrap();
+                        } else {
+                            println!("File not found after downloading");
+                        }
+                        self.tx.send(Event::InsertTags(song)).unwrap();
+                    }
+                }
             }
         }
         Ok(())
@@ -341,6 +407,7 @@ pub enum Event {
     UpdateTags(Song),
     DeleteSongDatabase(Song),
     VerifyAllSongIntegrity(),
+    DownloadAllMissingFromDatabase,
 }
 
 pub struct YoutubeDownloadOptions {

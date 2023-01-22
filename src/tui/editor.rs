@@ -76,7 +76,9 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     LinearLayout::vertical()
         .child(TextView::new("Database Editor").h_align(cursive::align::HAlign::Center))
         .child(hlayout)
-        .child(TextView::new("d - Delete | u - Update list"))
+        .child(TextView::new(
+            "d - Delete | u - Update list | V - verify all | R - download all missing",
+        ))
         .child(
             Panel::new(TextView::new("Standby").with_name("statusbar"))
                 .title("Status Bar")
@@ -173,4 +175,10 @@ pub fn verify_all_song_integrity(siv: &mut Cursive) {
     let user_data: &mut State = siv.user_data().unwrap();
     let tx = user_data.tx.clone();
     tx.send(Event::VerifyAllSongIntegrity()).unwrap();
+}
+
+pub fn download_all_missing(siv: &mut Cursive) {
+    let user_data: &mut State = siv.user_data().unwrap();
+    let tx = user_data.tx.clone();
+    tx.send(Event::DownloadAllMissingFromDatabase).unwrap();
 }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use eyre::Result;
 use rusqlite::{params, Connection, Transaction};
+use tracing::info;
 
 #[allow(dead_code)]
 pub struct Database {
@@ -52,7 +53,12 @@ SELECT id,path,title,album,artist,yt_id,tb_url FROM songs
     }
 
     pub fn insert_entry(&self, song: &Song) -> Result<()> {
-        let sql = "
+        match song.id {
+            Some(_id) => {
+                info!("song already exists in database");
+            }
+            None => {
+                let sql = "
 INSERT INTO songs (
                 path,
                 title,
@@ -62,22 +68,24 @@ INSERT INTO songs (
                 tb_url
 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 ";
-        let fname = if let Some(path) = &song.path {
-            path.file_name().unwrap().to_str().unwrap().to_string()
-        } else {
-            "Unknown".to_string()
-        };
-        self.conn.execute(
-            sql,
-            params![
-                fname,
-                song.title.clone().unwrap_or_else(|| "Unknown".to_string()),
-                song.get_albums_string(),
-                song.get_artists_string(),
-                song.yt_id.clone().unwrap_or_else(|| "None".to_string()),
-                song.tb_url.clone().unwrap_or_else(|| "None".to_string())
-            ],
-        )?;
+                let fname = if let Some(path) = &song.path {
+                    path.file_name().unwrap().to_str().unwrap().to_string()
+                } else {
+                    "Unknown".to_string()
+                };
+                self.conn.execute(
+                    sql,
+                    params![
+                        fname,
+                        song.title.clone().unwrap_or_else(|| "Unknown".to_string()),
+                        song.get_albums_string(),
+                        song.get_artists_string(),
+                        song.yt_id.clone().unwrap_or_else(|| "None".to_string()),
+                        song.tb_url.clone().unwrap_or_else(|| "None".to_string())
+                    ],
+                )?;
+            }
+        }
 
         Ok(())
     }
