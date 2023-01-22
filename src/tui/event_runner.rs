@@ -243,7 +243,7 @@ impl EventRunner {
                     Ok(_status) => {
                         self.cb_sink
                             .send(Box::new(|siv: &mut Cursive| {
-                                let status_text = format!("Verifying integrity of all songs");
+                                let status_text = "Verifying integrity of all songs".to_string();
                                 siv.call_on_all_named("statusbar", |view: &mut TextView| {
                                     view.set_content(&status_text)
                                 });
@@ -305,14 +305,13 @@ impl EventRunner {
                                             error!("process opusinfo was killed");
                                         }
                                     }
+                                } else {
                                 }
                             }
                         }
                         self.cb_sink
                             .send(Box::new(|siv: &mut Cursive| {
-                                let status_text = format!(
-                                    "done verifying integrity of all songs, check logs for info"
-                                );
+                                let status_text = "done verifying integrity of all songs, check logs for info".to_string();
                                 siv.call_on_all_named("statusbar", |view: &mut TextView| {
                                     view.set_content(&status_text)
                                 });
