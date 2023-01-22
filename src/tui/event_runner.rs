@@ -268,34 +268,42 @@ impl EventRunner {
                                         song.id.unwrap()
                                     );
                                 }
-                                let opusinfo = std::process::Command::new("opusinfo")
-                                    .arg(path)
-                                    .stdout(Stdio::null())
-                                    .stderr(Stdio::null())
-                                    .status()
-                                    .wrap_err("failed to execute command opusinfo")?;
-                                match opusinfo.code() {
-                                    Some(code) => {
-                                        if code != 0 {
-                                            error!(
+                                let ext: String = path
+                                    .extension()
+                                    .unwrap_or_default()
+                                    .to_str()
+                                    .unwrap()
+                                    .to_string();
+                                if ext.contains("opus") {
+                                    let opusinfo = std::process::Command::new("opusinfo")
+                                        .arg(path)
+                                        .stdout(Stdio::null())
+                                        .stderr(Stdio::null())
+                                        .status()
+                                        .wrap_err("failed to execute command opusinfo")?;
+                                    match opusinfo.code() {
+                                        Some(code) => {
+                                            if code != 0 {
+                                                error!(
                                                 "opusinfo returned code {} for song: {} - {} [{}]",
                                                 code,
                                                 song.title.as_ref().unwrap().clone(),
                                                 song.get_artists_string(),
                                                 song.id.unwrap()
                                             );
-                                        } else {
-                                            info!(
+                                            } else {
+                                                info!(
                                                 "opusinfo returned code {} for song: {} - {} [{}]",
                                                 code,
                                                 song.title.as_ref().unwrap().clone(),
                                                 song.get_artists_string(),
                                                 song.id.unwrap()
                                             );
+                                            }
                                         }
-                                    }
-                                    None => {
-                                        error!("process opusinfo was killed");
+                                        None => {
+                                            error!("process opusinfo was killed");
+                                        }
                                     }
                                 }
                             }
