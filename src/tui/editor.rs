@@ -11,8 +11,6 @@ use crate::database::Song;
 use super::{event_runner::Event, State};
 
 pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayout {
-    // TODO: rework this shit
-    // TODO: add reload
     let user_data: &mut State = siv.user_data().unwrap();
     let song_list = match &user_data.song_list {
         Some(sl) => sl.clone(),
@@ -78,7 +76,12 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     LinearLayout::vertical()
         .child(TextView::new("Database Editor").h_align(cursive::align::HAlign::Center))
         .child(hlayout)
-        .child(TextView::new("d - Delete | u - Update"))
+        .child(TextView::new("d - Delete | u - Update list"))
+        .child(
+            Panel::new(TextView::new("Standby").with_name("statusbar"))
+                .title("Status Bar")
+                .title_position(cursive::align::HAlign::Left),
+        )
 }
 
 fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {

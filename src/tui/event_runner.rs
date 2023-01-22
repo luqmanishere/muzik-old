@@ -16,7 +16,7 @@ pub struct EventRunner {
     config: Config,
 }
 use cursive::{
-    view::{Nameable, Scrollable},
+    view::Scrollable,
     views::{Dialog, LinearLayout, SelectView, TextView},
     CbSink, Cursive,
 };
@@ -34,17 +34,19 @@ impl EventRunner {
     }
 
     pub fn process(&self) {
+        // TODO: remove unwraps
         match self.rx.recv().unwrap() {
             Event::YoutubeSearch(kw) => {
-                // TODO: add a searching notification
+                let text = format!("Searching for: {}", kw);
                 self.cb_sink
-                    .send(Box::new(|siv: &mut Cursive| {
-                        let text = Dialog::text("Searching").with_name("search");
-                        siv.add_layer(text);
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                            view.set_content(&text);
+                        });
                     }))
                     .unwrap();
 
-                match search_youtube(kw) {
+                match search_youtube(kw.clone()) {
                     Ok(entries) => {
                         // IDK how this works but ok
                         self.cb_sink
@@ -65,12 +67,9 @@ impl EventRunner {
                                     },
                                 );
                                 // Notify on finish loading
-                                siv.call_on_name("search", |view: &mut Dialog| {
-                                    view.set_content(TextView::new("Done"));
-                                    view.add_button("Dismiss", |siv: &mut Cursive| {
-                                        siv.pop_layer();
-                                    });
-                                    view.set_focus(cursive::views::DialogFocus::Button(0));
+                                let text = format!("Done searching for: {}", kw);
+                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                    view.set_content(&text);
                                 });
                             }))
                             .unwrap();
@@ -87,13 +86,10 @@ impl EventRunner {
                 let artist = dl_options.artist.clone();
                 self.cb_sink
                     .send(Box::new(move |siv: &mut Cursive| {
-                        let popup = Dialog::text(format!(
-                            "Downloading: {}: {}",
-                            title,
-                            artist
-                        ))
-                        .dismiss_button("Dismiss");
-                        siv.add_layer(popup);
+                        let status_text = format!("Downloading: {}: {}", title, artist);
+                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                            view.set_content(&status_text)
+                        });
                     }))
                     .unwrap();
 
@@ -123,13 +119,11 @@ impl EventRunner {
                     let artist = dl_options.artist.clone();
                     self.cb_sink
                         .send(Box::new(move |siv: &mut Cursive| {
-                            siv.add_layer(
-                                Dialog::text(format!(
-                                    "Download finished! for: {} - {}",
-                                    title, artist
-                                ))
-                                .dismiss_button("Ok"),
-                            );
+                            let status_text =
+                                format!("Download finished for: {} - {}", title, artist);
+                            siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                view.set_content(&status_text)
+                            });
                         }))
                         .unwrap();
                 } else {
@@ -150,9 +144,30 @@ impl EventRunner {
             }
             Event::InsertTags(song) => {
                 let filename = song.path.as_ref().unwrap();
+                let title = song.title.clone().unwrap_or_default();
+                let artist = song.get_artists_string();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        let status_text = format!("Inserting tags for {} - {}", title, artist);
+                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                            view.set_content(&status_text)
+                        });
+                    }))
+                    .unwrap();
                 match tags::write_tags(filename.into(), &song) {
                     Ok(_) => {
                         info!("wrote tags to file successfully");
+                        let title = song.title.clone().unwrap_or_default();
+                        let artist = song.get_artists_string();
+                        self.cb_sink
+                            .send(Box::new(move |siv: &mut Cursive| {
+                                let status_text =
+                                    format!("Done inserting tags for {} - {}", title, artist);
+                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                    view.set_content(&status_text)
+                                });
+                            }))
+                            .unwrap();
                         self.tx.send(Event::InsertSongDatabase(song)).unwrap();
                     }
                     Err(e) => {
@@ -173,7 +188,23 @@ impl EventRunner {
                 }
             }
             Event::InsertSongDatabase(song) => match self.config.db.insert_entry(&song) {
-                Ok(_) => info!("inserted into database successfully"),
+                Ok(_) => {
+                    let title = song.title.clone().unwrap_or_default();
+                    let artist = song.get_artists_string();
+                    self.cb_sink
+                        .send(Box::new(move |siv: &mut Cursive| {
+                            let status_text =
+                                format!("Done inserting tags for {} - {}", title, artist);
+                            siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                view.set_content(&status_text)
+                            });
+                        }))
+                        .unwrap();
+                    self.cb_sink
+                        .send(Box::new(editor::update_database))
+                        .unwrap();
+                    info!("inserted into database successfully");
+                }
                 Err(e) => {
                     error!("failed to insert into database: {}", e);
                 }

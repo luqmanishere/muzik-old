@@ -2,7 +2,7 @@ use std::sync::mpsc::Sender;
 
 use cursive::{
     view::{Nameable, Resizable},
-    views::{Dialog, EditView, LinearLayout, NamedView, TextView},
+    views::{Dialog, EditView, LinearLayout, NamedView, Panel, TextView},
     Cursive,
 };
 use youtube_dl::SingleVideo;
@@ -24,6 +24,12 @@ pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<Lin
     LinearLayout::vertical()
         .child(TextView::new("Search:"))
         .child(search_box)
+        .child(TextView::new("No results"))
+        .child(
+            Panel::new(TextView::new("Standby").with_name("statusbar"))
+                .title("Status Bar")
+                .title_position(cursive::align::HAlign::Left),
+        )
         .with_name("download_v_layout")
 }
 
