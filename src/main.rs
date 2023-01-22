@@ -272,24 +272,18 @@ fn start_tui_log() -> Vec<WorkerGuard> {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     guards.push(guard);
 
-    let subs = tracing_subscriber::registry()
-        .with(
-            fmt::Layer::new()
-                .with_writer(non_blocking)
-                .with_ansi(false)
-                .with_timer(tracing_subscriber::fmt::time::time())
-                .with_filter(
-                    tracing_subscriber::filter::EnvFilter::builder()
-                        .with_default_directive(filter::LevelFilter::INFO.into())
-                        .from_env_lossy(),
-                ),
-        )
-        .with(
-            fmt::layer()
-                .with_ansi(true)
-                .with_timer(tracing_subscriber::fmt::time::time())
-                .with_filter(filter::LevelFilter::INFO),
-        );
+    // Only write logs to log file
+    let subs = tracing_subscriber::registry().with(
+        fmt::Layer::new()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .with_timer(tracing_subscriber::fmt::time::time())
+            .with_filter(
+                tracing_subscriber::filter::EnvFilter::builder()
+                    .with_default_directive(filter::LevelFilter::INFO.into())
+                    .from_env_lossy(),
+            ),
+    );
     tracing::subscriber::set_global_default(subs).expect("setting default subscriber failed");
     info!("logger started!");
     guards
