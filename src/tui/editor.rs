@@ -168,3 +168,9 @@ pub fn delete_from_database(siv: &mut Cursive) {
         tx.send(Event::DeleteSongDatabase(song)).unwrap();
     });
 }
+
+pub fn verify_all_song_integrity(siv: &mut Cursive) {
+    let user_data: &mut State = siv.user_data().unwrap();
+    let tx = user_data.tx.clone();
+    tx.send(Event::VerifyAllSongIntegrity()).unwrap();
+}

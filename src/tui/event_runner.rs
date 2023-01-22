@@ -1,16 +1,18 @@
 use std::{
     path::PathBuf,
+    process::Stdio,
     sync::mpsc::{self, Receiver, Sender},
     thread::JoinHandle,
 };
 
-use tracing::{debug, error, info};
+use eyre::{Context, Result};
+use tracing::{debug, error, info, warn};
 use youtube_dl::{SearchOptions, SingleVideo, YoutubeDl};
 
 #[allow(dead_code)]
 pub struct EventRunner {
     thread_handle: Option<JoinHandle<()>>,
-    cb_sink: CbSink,
+    pub cb_sink: CbSink,
     tx: Sender<Event>,
     rx: Receiver<Event>,
     config: Config,
@@ -33,7 +35,7 @@ impl EventRunner {
         }
     }
 
-    pub fn process(&self) {
+    pub fn process(&self) -> Result<()> {
         // TODO: remove unwraps
         match self.rx.recv().unwrap() {
             Event::YoutubeSearch(kw) => {
@@ -232,7 +234,90 @@ impl EventRunner {
                     }
                 }
             }
+            Event::VerifyAllSongIntegrity() => {
+                match std::process::Command::new("opusinfo")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                {
+                    Ok(_status) => {
+                        self.cb_sink
+                            .send(Box::new(|siv: &mut Cursive| {
+                                let status_text = format!("Verifying integrity of all songs");
+                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                    view.set_content(&status_text)
+                                });
+                            }))
+                            .unwrap();
+                        if let Ok(song_list) = self.config.db.get_all(self.config.music_dir.clone())
+                        {
+                            for song in song_list {
+                                let path = song.path.as_ref().unwrap().clone();
+                                if path.exists() {
+                                    info!(
+                                        "file for {} - {} [{}] exists",
+                                        song.title.as_ref().unwrap().clone(),
+                                        song.get_artists_string(),
+                                        song.id.unwrap()
+                                    );
+                                } else {
+                                    warn!(
+                                        "file for {} - {} [{}] does not exist",
+                                        song.title.as_ref().unwrap().clone(),
+                                        song.get_artists_string(),
+                                        song.id.unwrap()
+                                    );
+                                }
+                                let opusinfo = std::process::Command::new("opusinfo")
+                                    .arg(path)
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::null())
+                                    .status()
+                                    .wrap_err("failed to execute command opusinfo")?;
+                                match opusinfo.code() {
+                                    Some(code) => {
+                                        if code != 0 {
+                                            error!(
+                                                "opusinfo returned code {} for song: {} - {} [{}]",
+                                                code,
+                                                song.title.as_ref().unwrap().clone(),
+                                                song.get_artists_string(),
+                                                song.id.unwrap()
+                                            );
+                                        } else {
+                                            info!(
+                                                "opusinfo returned code {} for song: {} - {} [{}]",
+                                                code,
+                                                song.title.as_ref().unwrap().clone(),
+                                                song.get_artists_string(),
+                                                song.id.unwrap()
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        error!("process opusinfo was killed");
+                                    }
+                                }
+                            }
+                        }
+                        self.cb_sink
+                            .send(Box::new(|siv: &mut Cursive| {
+                                let status_text = format!(
+                                    "done verifying integrity of all songs, check logs for info"
+                                );
+                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
+                                    view.set_content(&status_text)
+                                });
+                            }))
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        error!("cant execute opusinfo: {}", e);
+                    }
+                };
+            }
         }
+        Ok(())
     }
 
     pub fn get_tx(&self) -> Sender<Event> {
@@ -248,6 +333,7 @@ pub enum Event {
     UpdateSongDatabase(Song),
     UpdateTags(Song),
     DeleteSongDatabase(Song),
+    VerifyAllSongIntegrity(),
 }
 
 pub struct YoutubeDownloadOptions {
@@ -258,8 +344,6 @@ pub struct YoutubeDownloadOptions {
     pub song: SingleVideo,
     pub music_dir: PathBuf,
 }
-
-use eyre::Result;
 
 use crate::{config::Config, database::Song, tags, tui::editor};
 

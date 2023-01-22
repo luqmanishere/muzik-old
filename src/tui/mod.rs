@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::mpsc::Sender};
 
 use cursive::{
     view::Nameable,
-    views::{OnEventView, Panel},
+    views::{Dialog, OnEventView, Panel},
     Cursive, CursiveExt,
 };
 use cursive_tabs::TabPanel;
@@ -39,7 +39,20 @@ pub fn run_tui() -> Result<()> {
     let tx = ev_man.get_tx();
     let tx_us = ev_man.get_tx();
     std::thread::spawn(move || loop {
-        ev_man.process();
+        match ev_man.process() {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error occurs in event loop: {}", e);
+                ev_man
+                    .cb_sink
+                    .send(Box::new(|siv: &mut Cursive| {
+                        let dialog = Dialog::text("Error occured in event loop. Check the logs")
+                            .dismiss_button("Close");
+                        siv.add_layer(dialog);
+                    }))
+                    .unwrap();
+            }
+        };
     });
 
     siv.set_user_data(State {
@@ -58,6 +71,7 @@ pub fn run_tui() -> Result<()> {
         OnEventView::new(editor::draw_database_editor(&mut siv, tx.clone()))
             .on_event('u', editor::update_database)
             .on_event('d', editor::delete_from_database)
+            .on_event('V', editor::verify_all_song_integrity)
             .with_name("Editor"),
     );
     panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));
