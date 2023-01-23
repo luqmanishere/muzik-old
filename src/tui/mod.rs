@@ -65,9 +65,9 @@ pub fn run_tui() -> Result<()> {
     });
     siv.load_toml(include_str!("theme.toml")).unwrap();
 
-    let mut panel = TabPanel::new();
-    panel.set_bar_alignment(cursive_tabs::Align::Center);
-    panel.add_tab(
+    let mut tab_panel = TabPanel::new();
+    tab_panel.set_bar_alignment(cursive_tabs::Align::Center);
+    tab_panel.add_tab(
         OnEventView::new(editor::draw_database_editor(&mut siv, tx.clone()))
             .on_event('u', editor::update_database)
             .on_event('d', editor::delete_from_database)
@@ -75,9 +75,24 @@ pub fn run_tui() -> Result<()> {
             .on_event('R', editor::download_all_missing)
             .with_name("Editor"),
     );
-    panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));
-    panel.set_active_tab("Editor")?;
-    let panel = Panel::new(panel.with_name("tab_panel")).title("muziktui");
+    tab_panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));
+    tab_panel.set_active_tab("Editor")?;
+    let panel = Panel::new(
+        OnEventView::new(tab_panel.with_name("tab_panel"))
+            .on_event('1', |siv: &mut Cursive| {
+                siv.call_on_name("tab_panel", |v: &mut TabPanel| {
+                    v.set_active_tab("Editor").unwrap()
+                })
+                .unwrap();
+            })
+            .on_event('2', |siv: &mut Cursive| {
+                siv.call_on_name("tab_panel", |v: &mut TabPanel| {
+                    v.set_active_tab("Download").unwrap()
+                })
+                .unwrap();
+            }),
+    )
+    .title("muziktui");
     siv.add_layer(panel);
 
     siv.add_global_callback('~', Cursive::toggle_debug_console);
