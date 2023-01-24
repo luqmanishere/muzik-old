@@ -6,7 +6,7 @@ use cursive::{
     Cursive, CursiveExt,
 };
 use cursive_tabs::TabPanel;
-use directories_next::UserDirs;
+use directories::UserDirs;
 use eyre::Result;
 use tracing::error;
 

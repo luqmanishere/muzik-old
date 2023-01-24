@@ -77,7 +77,7 @@ async fn tui_command() -> Result<()> {
 }
 
 async fn download_command(query: Vec<String>) -> Result<()> {
-    let music_dir = directories_next::UserDirs::new()
+    let music_dir = directories::UserDirs::new()
         .unwrap()
         .audio_dir()
         .unwrap()
