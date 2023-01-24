@@ -1753,7 +1753,7 @@ dependencies = [
 [[package]]
 name = "lofty"
 version = "0.10.0"
-source = "git+https://github.com/Serial-ATA/lofty-rs?branch=ogg-corruption#4a5734dbfa1e8016009842300428aac481014e87"
+source = "git+https://github.com/Serial-ATA/lofty-rs#3f9d1b6229c2d7aa6366badd5cc62f295361dd29"
 dependencies = [
  "base64 0.21.0",
  "byteorder",
@@ -1769,7 +1769,7 @@ dependencies = [
 [[package]]
 name = "lofty_attr"
 version = "0.5.0"
-source = "git+https://github.com/Serial-ATA/lofty-rs?branch=ogg-corruption#4a5734dbfa1e8016009842300428aac481014e87"
+source = "git+https://github.com/Serial-ATA/lofty-rs#3f9d1b6229c2d7aa6366badd5cc62f295361dd29"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2229,7 +2229,7 @@ dependencies = [
 [[package]]
 name = "ogg_pager"
 version = "0.4.0"
-source = "git+https://github.com/Serial-ATA/lofty-rs?branch=ogg-corruption#4a5734dbfa1e8016009842300428aac481014e87"
+source = "git+https://github.com/Serial-ATA/lofty-rs#3f9d1b6229c2d7aa6366badd5cc62f295361dd29"
 dependencies = [
  "byteorder",
 ]
@@ -4040,7 +4040,9 @@ checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 
 [[package]]
 name = "youtube_dl"
-version = "0.7.0"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3525e9e8fe49f1c976a6d1ed2878b2637a0c1d202ef2a32529ad4b64f4b73f"
 dependencies = [
  "log",
  "serde",

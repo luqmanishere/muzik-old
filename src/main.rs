@@ -52,7 +52,8 @@ async fn main() -> Result<()> {
             Commands::List => list_command().await.unwrap(),
             Commands::Delete => delete_command().await.unwrap(),
             Commands::Tui => {
-                let mut _guards = start_tui_log();
+                let tempdir = tempfile::tempdir()?;
+                let mut _guards = start_tui_log(tempdir.path().to_path_buf());
                 tui_command().await.unwrap()
             }
         }
@@ -265,10 +266,11 @@ async fn delete_command() -> Result<()> {
     Ok(())
 }
 
-fn start_tui_log() -> Vec<WorkerGuard> {
+fn start_tui_log(tmp: PathBuf) -> Vec<WorkerGuard> {
     let mut guards = vec![];
 
-    let file_appender = tracing_appender::rolling::daily("/tmp/muzik", "log");
+    let tmp = tmp.join("muzik");
+    let file_appender = tracing_appender::rolling::daily(tmp, "log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     guards.push(guard);
 

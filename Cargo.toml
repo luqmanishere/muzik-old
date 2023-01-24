@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 eyre = "0.6"
-youtube_dl = {path = "../youtube-dl-rs", default-features = false , features = ["tokio", "yt-dlp"]}
+youtube_dl = {version = "0.8", default-features = false , features = ["tokio"]}
 tokio = {version = "1", features= ["full"]}
 clap = {version = "4", features = ["derive"]}
 dialoguer = {version = "0.10.2", features=["fuzzy-select"]}
@@ -18,7 +18,7 @@ image = "0.24"
 reqwest = {version = "0.11" ,features = ["blocking"]}
 directories-next = "2"
 rusqlite = {version = "0.28", features = ["bundled"]}
-lofty = {git = "https://github.com/Serial-ATA/lofty-rs", branch = "ogg-corruption"}
+lofty = {git = "https://github.com/Serial-ATA/lofty-rs"}
 iced = "0.6"
 cursive = {version = "0.20", default-features = false, features = ["crossterm-backend", "toml"]}
 cursive-tabs = "^0"
