@@ -90,6 +90,12 @@ pub fn run_tui() -> Result<()> {
                     v.set_active_tab("Download").unwrap()
                 })
                 .unwrap();
+            })
+            .on_event(cursive::event::Key::Tab, |siv: &mut Cursive| {
+                siv.call_on_name("tab_panel", |v: &mut TabPanel| {
+                    v.next();
+                })
+                .unwrap();
             }),
     )
     .title("muziktui");
