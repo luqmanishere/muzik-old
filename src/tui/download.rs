@@ -52,12 +52,10 @@ pub fn start_download(siv: &mut Cursive, song: &SingleVideo) {
         let artist = {
             if let Some(artist) = song2.artist.clone() {
                 artist
+            } else if let Some(channel) = song2.channel.clone() {
+                channel
             } else {
-                if let Some(channel) = song2.channel.clone() {
-                    channel
-                } else {
-                    "Unknown".to_string()
-                }
+                "Unknown".to_string()
             }
         };
         let album = song2.album.clone().unwrap_or_else(|| "Unknown".to_string());
