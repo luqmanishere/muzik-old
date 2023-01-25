@@ -49,10 +49,21 @@ pub fn start_download(siv: &mut Cursive, song: &SingleVideo) {
     .button("Edit", move |siv: &mut Cursive| {
         let id = song2.id.clone();
         let title = song2.title.clone();
-        let artist = song2.channel.clone().unwrap();
+        let artist = {
+            if let Some(artist) = song2.artist.clone() {
+                artist
+            } else {
+                if let Some(channel) = song2.channel.clone() {
+                    channel
+                } else {
+                    "Unknown".to_string()
+                }
+            }
+        };
+        let album = song2.album.clone().unwrap_or_else(|| "Unknown".to_string());
 
         siv.pop_layer();
-        draw_metadata_editor(siv, id, title, artist, song2.clone());
+        draw_metadata_editor(siv, id, title, artist, album, song2.clone());
     });
     siv.add_layer(confirm);
 }
@@ -62,6 +73,7 @@ fn draw_metadata_editor(
     id: String,
     title: String,
     artist: String,
+    album: String,
     song: SingleVideo,
 ) {
     let left = LinearLayout::vertical()
@@ -82,7 +94,12 @@ fn draw_metadata_editor(
                 .with_name("artist_input")
                 .min_width(30),
         )
-        .child(EditView::new().with_name("album_input").min_width(30));
+        .child(
+            EditView::new()
+                .content(album)
+                .with_name("album_input")
+                .min_width(30),
+        );
 
     let hlayout = LinearLayout::horizontal().child(left).child(right);
 

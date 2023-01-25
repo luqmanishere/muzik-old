@@ -426,11 +426,15 @@ pub struct YoutubeDownloadOptions {
 use crate::{config::Config, database::Song, tags, tui::editor};
 
 fn search_youtube(kw: String) -> Result<Vec<SingleVideo>> {
-    let search_options = SearchOptions::youtube(kw).with_count(5);
-    let yt_search = YoutubeDl::search_for(&search_options)
-        .youtube_dl_path("yt-dlp")
-        .run()
-        .unwrap();
+    let yt_search = if !kw.contains("http") {
+        let search_options = SearchOptions::youtube(kw).with_count(5);
+        YoutubeDl::search_for(&search_options)
+            .youtube_dl_path("yt-dlp")
+            .run()
+            .unwrap()
+    } else {
+        YoutubeDl::new(kw).download(false).run().unwrap()
+    };
 
     match yt_search {
         youtube_dl::YoutubeDlOutput::Playlist(playlist) => {
