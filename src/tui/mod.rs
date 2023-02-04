@@ -23,7 +23,11 @@ mod event_runner;
 
 pub fn run_tui() -> Result<()> {
     let mut siv = Cursive::new();
-    let music_dir = UserDirs::new().unwrap().audio_dir().unwrap().to_path_buf();
+    let music_dir = if let Ok(_termux_ver) = std::env::var("TERMUX_VERSION") {
+        PathBuf::from(std::env::var("HOME").unwrap()).join("storage/music")
+    } else {
+        UserDirs::new().unwrap().audio_dir().unwrap().to_path_buf()
+    };
     let db = match Database::new(music_dir.join("database.sqlite")) {
         Ok(db) => Some(db),
         Err(e) => {
