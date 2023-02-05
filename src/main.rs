@@ -83,8 +83,7 @@ async fn download_command(query: Vec<String>) -> Result<()> {
         .unwrap()
         .to_path_buf();
     debug!("music dir is : {}", music_dir.display());
-    let db = Database::new(music_dir.join("database.sqlite"))?;
-    let config = Config { music_dir, db };
+    let config = Config::default();
     let name: String = query.join(" ");
 
     println!("search: {}", name);

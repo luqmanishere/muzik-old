@@ -7,7 +7,7 @@ use std::{
 
 use eyre::{Context, Result};
 use tracing::{debug, error, info, warn};
-use youtube_dl::{SearchOptions, SingleVideo, YoutubeDl};
+use youtube_dl::{SearchOptions, SingleVideo, YoutubeDl, YoutubeDlOutput};
 
 #[allow(dead_code)]
 pub struct EventRunner {
@@ -48,7 +48,7 @@ impl EventRunner {
                     }))
                     .unwrap();
 
-                match search_youtube(kw.clone()) {
+                match search_youtube(kw.clone(), self.config.cookies.clone()) {
                     Ok(entries) => {
                         // IDK how this works but ok
                         self.cb_sink
@@ -76,7 +76,7 @@ impl EventRunner {
                             }))
                             .unwrap();
                     }
-                    Err(_) => todo!(),
+                    Err(e) => return Err(e),
                 }
             }
             Event::YoutubeDownload(dl_options) => {
@@ -99,23 +99,12 @@ impl EventRunner {
                     format!("{} - {}.%(ext)s", dl_options.title, dl_options.artist);
                 let filename = format!("{} - {}.opus", dl_options.title, dl_options.artist);
                 let filename = dl_options.music_dir.join(filename);
-                let _youtube = YoutubeDl::new(dl_options.id.clone())
-                    .youtube_dl_path("yt-dlp")
-                    .extra_arg("--audio-format")
-                    .extra_arg("opus")
-                    .format("251")
-                    .extra_arg("--downloader")
-                    .extra_arg("aria2c")
-                    .extra_arg("--sponsorblock-remove")
-                    .extra_arg("all")
-                    .extra_arg("-P")
-                    .extra_arg(dl_options.music_dir.to_str().unwrap())
-                    .extra_arg("-o")
-                    .extra_arg(filename_format)
-                    .download(true)
-                    .extract_audio(true)
-                    .run()
-                    .unwrap();
+                let _youtube = download_from_youtube(
+                    dl_options.id.clone(),
+                    dl_options.music_dir.display().to_string(),
+                    filename_format,
+                    self.config.cookies.clone(),
+                )?;
 
                 if filename.exists() {
                     let title = dl_options.title.clone();
@@ -354,24 +343,12 @@ impl EventRunner {
                         let filename_format = format!("{} - {}.%(ext)s", title, artist);
                         let filename_full = path.clone();
                         let yt_id = song.yt_id.as_ref().unwrap().clone();
-                        let _youtube = YoutubeDl::new(yt_id)
-                            .youtube_dl_path("yt-dlp")
-                            .extra_arg("--audio-format")
-                            .extra_arg("opus")
-                            .extra_arg("-f")
-                            .extra_arg("251")
-                            .extra_arg("--downloader")
-                            .extra_arg("aria2c")
-                            .extra_arg("--sponsorblock-remove")
-                            .extra_arg("all")
-                            .extra_arg("-P")
-                            .extra_arg(self.config.music_dir.display().to_string())
-                            .extra_arg("-o")
-                            .extra_arg(filename_format)
-                            .download(true)
-                            .extract_audio(true)
-                            .run()
-                            .unwrap();
+                        let _youtube = download_from_youtube(
+                            yt_id,
+                            self.config.music_dir.display().to_string(),
+                            filename_format,
+                            self.config.cookies.clone(),
+                        )?;
 
                         if filename_full.exists() {
                             let title = song.title.clone().unwrap();
@@ -424,22 +401,85 @@ pub struct YoutubeDownloadOptions {
 
 use crate::{config::Config, database::Song, tags, tui::editor};
 
-fn search_youtube(kw: String) -> Result<Vec<SingleVideo>> {
+use eyre::eyre;
+
+fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVideo>> {
     let yt_search = if !kw.contains("http") {
         let search_options = SearchOptions::youtube(kw).with_count(5);
-        YoutubeDl::search_for(&search_options)
-            .youtube_dl_path("yt-dlp")
-            .run()
-            .unwrap()
+        if let Some(cookie) = cookies {
+            YoutubeDl::search_for(&search_options)
+                .cookies(cookie.display().to_string())
+                .run()
+        } else {
+            YoutubeDl::search_for(&search_options).run()
+        }
     } else {
-        YoutubeDl::new(kw).download(false).run().unwrap()
+        if let Some(cookie) = cookies {
+            YoutubeDl::new(kw)
+                .download(false)
+                .cookies(cookie.display().to_string())
+                .run()
+        } else {
+            YoutubeDl::new(kw).download(false).run()
+        }
     };
 
     match yt_search {
-        youtube_dl::YoutubeDlOutput::Playlist(playlist) => {
-            let entries = playlist.entries.unwrap();
-            Ok(entries)
-        }
-        youtube_dl::YoutubeDlOutput::SingleVideo(video) => Ok(vec![*video]),
+        Ok(output) => match output {
+            youtube_dl::YoutubeDlOutput::Playlist(playlist) => {
+                let entries = playlist.entries.unwrap_or_else(|| vec![]);
+                return Ok(entries);
+            }
+            youtube_dl::YoutubeDlOutput::SingleVideo(video) => return Ok(vec![*video]),
+        },
+        Err(err) => match err {
+            youtube_dl::Error::Io(e) => return Err(eyre!("error during I/O: {}", e)),
+            youtube_dl::Error::Json(e) => return Err(eyre!("error parsing JSON: {}", e)),
+            youtube_dl::Error::ExitCode { code, stderr } => {
+                return Err(eyre!(
+                    "process returned code: {}, with stderr: {}",
+                    code,
+                    stderr
+                ))
+            }
+            youtube_dl::Error::ProcessTimeout => return Err(eyre!("process timed out")),
+        },
+    };
+}
+
+fn download_from_youtube(
+    id: String,
+    output_dir: String,
+    format: String,
+    cookies: Option<PathBuf>,
+) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+    if let Some(cookie) = cookies {
+        println!("cookie found");
+        YoutubeDl::new(&id)
+            .youtube_dl_path("yt-dlp")
+            .extra_arg("--audio-format")
+            .extra_arg("opus")
+            .format("251")
+            .extra_arg("--sponsorblock-remove")
+            .extra_arg("all")
+            .output_directory(&output_dir)
+            .output_template(&format)
+            .cookies(cookie.display().to_string())
+            .download(true)
+            .extract_audio(true)
+            .run()
+    } else {
+        YoutubeDl::new(id)
+            .youtube_dl_path("yt-dlp")
+            .extra_arg("--audio-format")
+            .extra_arg("opus")
+            .format("251")
+            .extra_arg("--sponsorblock-remove")
+            .extra_arg("all")
+            .output_directory(output_dir)
+            .output_template(format)
+            .download(true)
+            .extract_audio(true)
+            .run()
     }
 }

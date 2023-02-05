@@ -23,6 +23,7 @@ mod event_runner;
 
 pub fn run_tui() -> Result<()> {
     let mut siv = Cursive::new();
+    // TODO: only use 1 config
     let music_dir = if let Ok(_termux_ver) = std::env::var("TERMUX_VERSION") {
         PathBuf::from(std::env::var("HOME").unwrap()).join("storage/music")
     } else {
@@ -35,10 +36,7 @@ pub fn run_tui() -> Result<()> {
             None
         }
     };
-    let conf = Config {
-        db: Database::new(music_dir.join("database.sqlite")).unwrap(),
-        music_dir: music_dir.clone(),
-    };
+    let conf = Config::default();
     let ev_man = event_runner::EventRunner::new(siv.cb_sink().clone(), conf);
     let tx = ev_man.get_tx();
     let tx_us = ev_man.get_tx();
@@ -49,9 +47,9 @@ pub fn run_tui() -> Result<()> {
                 error!("Error occurs in event loop: {}", e);
                 ev_man
                     .cb_sink
-                    .send(Box::new(|siv: &mut Cursive| {
-                        let dialog = Dialog::text("Error occured in event loop. Check the logs")
-                            .dismiss_button("Close");
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        let text = format!("Error occured in event loop: {}", e);
+                        let dialog = Dialog::text(text).dismiss_button("Close");
                         siv.add_layer(dialog);
                     }))
                     .unwrap();
