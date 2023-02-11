@@ -53,7 +53,7 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     let select_song = select_song
         .with_name("select_song")
         .scrollable()
-        .min_size((20, 10));
+        .min_width(20);
     let select_song = Panel::new(select_song).title("Songs");
 
     let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
@@ -66,12 +66,15 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
         siv.add_layer(editor);
     });
     let select_metadata = select_metadata.with_name("select_metadata");
-    let select_metadata = select_metadata.scrollable().min_size((20, 10));
+    let select_metadata = select_metadata.scrollable().min_width(20);
     let select_metadata = Panel::new(select_metadata).title("Metadata");
 
     let hlayout = LinearLayout::horizontal()
         .child(select_song)
-        .child(select_metadata);
+        .child(select_metadata)
+        .scrollable()
+        .scroll_x(true)
+        .show_scrollbars(false);
 
     LinearLayout::vertical()
         .child(TextView::new("Database Editor").h_align(cursive::align::HAlign::Center))
