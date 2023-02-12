@@ -39,7 +39,7 @@ impl Default for Config {
         } else {
             PathBuf::from(std::env::var("HOME").unwrap())
                 .join(".local/share/muzik/cookies.txt")
-                .to_path_buf()
+                
         };
         Self {
             music_dir,

@@ -359,24 +359,22 @@ fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVide
         } else {
             YoutubeDl::search_for(&search_options).run()
         }
+    } else if let Some(cookie) = cookies {
+        YoutubeDl::new(kw)
+            .download(false)
+            .cookies(cookie.display().to_string())
+            .run()
     } else {
-        if let Some(cookie) = cookies {
-            YoutubeDl::new(kw)
-                .download(false)
-                .cookies(cookie.display().to_string())
-                .run()
-        } else {
-            YoutubeDl::new(kw).download(false).run()
-        }
+        YoutubeDl::new(kw).download(false).run()
     };
 
     match yt_search {
         Ok(output) => match output {
             youtube_dl::YoutubeDlOutput::Playlist(playlist) => {
-                let entries = playlist.entries.unwrap_or_else(|| vec![]);
-                return Ok(entries);
+                let entries = playlist.entries.unwrap_or_default();
+                Ok(entries)
             }
-            youtube_dl::YoutubeDlOutput::SingleVideo(video) => return Ok(vec![*video]),
+            youtube_dl::YoutubeDlOutput::SingleVideo(video) => Ok(vec![*video]),
         },
         Err(err) => match err {
             youtube_dl::Error::Io(e) => return Err(eyre!("error during I/O: {}", e)),
@@ -390,7 +388,7 @@ fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVide
             }
             youtube_dl::Error::ProcessTimeout => return Err(eyre!("process timed out")),
         },
-    };
+    }
 }
 
 fn download_from_youtube(
