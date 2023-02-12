@@ -40,13 +40,7 @@ impl EventRunner {
         match self.rx.recv().unwrap() {
             Event::YoutubeSearch(kw) => {
                 let text = format!("Searching for: {}", kw);
-                self.cb_sink
-                    .send(Box::new(move |siv: &mut Cursive| {
-                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                            view.set_content(&text);
-                        });
-                    }))
-                    .unwrap();
+                self.notify_ui(text);
 
                 match search_youtube(kw.clone(), self.config.cookies.clone()) {
                     Ok(entries) => {
@@ -86,14 +80,8 @@ impl EventRunner {
                 );
                 let title = dl_options.title.clone();
                 let artist = dl_options.artist.clone();
-                self.cb_sink
-                    .send(Box::new(move |siv: &mut Cursive| {
-                        let status_text = format!("Downloading: {}: {}", title, artist);
-                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                            view.set_content(&status_text)
-                        });
-                    }))
-                    .unwrap();
+                let status_text = format!("Downloading: {}: {}", title, artist);
+                self.notify_ui(status_text);
 
                 let filename_format =
                     format!("{} - {}.%(ext)s", dl_options.title, dl_options.artist);
@@ -109,15 +97,8 @@ impl EventRunner {
                 if filename.exists() {
                     let title = dl_options.title.clone();
                     let artist = dl_options.artist.clone();
-                    self.cb_sink
-                        .send(Box::new(move |siv: &mut Cursive| {
-                            let status_text =
-                                format!("Download finished for: {} - {}", title, artist);
-                            siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                view.set_content(&status_text)
-                            });
-                        }))
-                        .unwrap();
+                    let status_text = format!("Download finished for: {} - {}", title, artist);
+                    self.notify_ui(status_text);
                 } else {
                     println!("File not found after downloading");
                 }
@@ -139,28 +120,15 @@ impl EventRunner {
                 debug!("{}", &filename.display());
                 let title = song.title.clone().unwrap_or_default();
                 let artist = song.get_artists_string();
-                self.cb_sink
-                    .send(Box::new(move |siv: &mut Cursive| {
-                        let status_text = format!("Inserting tags for {} - {}", title, artist);
-                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                            view.set_content(&status_text)
-                        });
-                    }))
-                    .unwrap();
+                let status_text = format!("Inserting tags for {} - {}", title, artist);
+                self.notify_ui(status_text);
                 match tags::write_tags(filename.into(), &song) {
                     Ok(_) => {
                         info!("wrote tags to file successfully");
                         let title = song.title.clone().unwrap_or_default();
                         let artist = song.get_artists_string();
-                        self.cb_sink
-                            .send(Box::new(move |siv: &mut Cursive| {
-                                let status_text =
-                                    format!("Done inserting tags for {} - {}", title, artist);
-                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                    view.set_content(&status_text)
-                                });
-                            }))
-                            .unwrap();
+                        let status_text = format!("Done inserting tags for {} - {}", title, artist);
+                        self.notify_ui(status_text);
                         self.tx.send(Event::InsertSongDatabase(song)).unwrap();
                     }
                     Err(e) => {
@@ -184,15 +152,9 @@ impl EventRunner {
                 Ok(_) => {
                     let title = song.title.clone().unwrap_or_default();
                     let artist = song.get_artists_string();
-                    self.cb_sink
-                        .send(Box::new(move |siv: &mut Cursive| {
-                            let status_text =
-                                format!("Done inserting into database for {} - {}", title, artist);
-                            siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                view.set_content(&status_text)
-                            });
-                        }))
-                        .unwrap();
+                    let status_text =
+                        format!("Done inserting into database for {} - {}", title, artist);
+                    self.notify_ui(status_text);
                     self.cb_sink
                         .send(Box::new(editor::update_database))
                         .unwrap();
@@ -232,14 +194,8 @@ impl EventRunner {
                     .status()
                 {
                     Ok(_status) => {
-                        self.cb_sink
-                            .send(Box::new(|siv: &mut Cursive| {
-                                let status_text = "Verifying integrity of all songs".to_string();
-                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                    view.set_content(&status_text)
-                                });
-                            }))
-                            .unwrap();
+                        let status_text = "Verifying integrity of all songs".to_string();
+                        self.notify_ui(status_text);
                         if let Ok(song_list) = self.config.db.get_all(self.config.music_dir.clone())
                         {
                             for song in song_list {
@@ -300,16 +256,10 @@ impl EventRunner {
                                 }
                             }
                         }
-                        self.cb_sink
-                            .send(Box::new(|siv: &mut Cursive| {
-                                let status_text =
-                                    "done verifying integrity of all songs, check logs for info"
-                                        .to_string();
-                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                    view.set_content(&status_text)
-                                });
-                            }))
-                            .unwrap();
+                        let status_text =
+                            "done verifying integrity of all songs, check logs for info"
+                                .to_string();
+                        self.notify_ui(status_text);
                     }
                     Err(e) => {
                         error!("cant execute opusinfo: {}", e);
@@ -329,14 +279,8 @@ impl EventRunner {
                         // TODO: download with metadata
                         let title = song.title.clone().unwrap();
                         let artist = song.get_artists_string();
-                        self.cb_sink
-                            .send(Box::new(move |siv: &mut Cursive| {
-                                let status_text = format!("Downloading: {}: {}", title, artist);
-                                siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                    view.set_content(&status_text)
-                                });
-                            }))
-                            .unwrap();
+                        let status_text = format!("Downloading: {}: {}", title, artist);
+                        self.notify_ui(status_text);
 
                         let title = song.title.clone().unwrap();
                         let artist = song.get_artists_string();
@@ -353,15 +297,9 @@ impl EventRunner {
                         if filename_full.exists() {
                             let title = song.title.clone().unwrap();
                             let artist = song.get_artists_string();
-                            self.cb_sink
-                                .send(Box::new(move |siv: &mut Cursive| {
-                                    let status_text =
-                                        format!("Download finished for: {} - {}", title, artist);
-                                    siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                                        view.set_content(&status_text)
-                                    });
-                                }))
-                                .unwrap();
+                            let status_text =
+                                format!("Download finished for: {} - {}", title, artist);
+                            self.notify_ui(status_text);
                         } else {
                             println!("File not found after downloading");
                         }
@@ -375,6 +313,14 @@ impl EventRunner {
 
     pub fn get_tx(&self) -> Sender<Event> {
         self.tx.clone()
+    }
+
+    pub fn notify_ui(&self, msg: String) {
+        self.cb_sink
+            .send(Box::new(move |siv: &mut Cursive| {
+                siv.call_on_all_named("statusbar", |view: &mut TextView| view.set_content(&msg));
+            }))
+            .unwrap();
     }
 }
 
