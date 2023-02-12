@@ -105,7 +105,11 @@ INSERT INTO songs (
             sql,
             params![
                 song.id,
-                song.get_filename(),
+                if song.npath.is_none() {
+                    song.get_filename()
+                } else {
+                    song.get_new_filename()
+                },
                 song.title,
                 song.get_albums_string(),
                 song.get_artists_string(),
@@ -113,6 +117,10 @@ INSERT INTO songs (
                 song.tb_url
             ],
         )?;
+        // Rename file if updated
+        if let Some(new_path) = song.npath.clone() {
+            std::fs::rename(song.path.as_ref().unwrap(), new_path)?;
+        }
         Ok(())
     }
     pub fn delete_entry_by_id(&self, id: usize) -> Result<()> {
@@ -133,14 +141,17 @@ INSERT INTO songs (
 #[derive(Clone)]
 pub struct Song {
     pub id: Option<usize>,
+    /// Full path to file
     pub path: Option<PathBuf>,
     pub title: Option<String>,
     pub album: Option<Vec<String>>,
     pub artist: Option<Vec<String>>,
     pub yt_id: Option<String>,
     pub tb_url: Option<String>,
+    pub npath: Option<PathBuf>,
 }
 
+#[allow(dead_code)]
 impl Song {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -177,7 +188,13 @@ impl Song {
             artist,
             yt_id,
             tb_url,
+            npath: None,
         }
+    }
+
+    pub fn set_title(&mut self, title: Option<String>) {
+        self.title = title;
+        self.compute_filename();
     }
 
     pub fn set_artists(&mut self, artists: String) {
@@ -187,6 +204,7 @@ impl Song {
             .collect::<Vec<_>>();
 
         self.artist = Some(artist);
+        self.compute_filename();
     }
 
     pub fn set_albums(&mut self, albums: String) {
@@ -196,6 +214,7 @@ impl Song {
             .collect::<Vec<_>>();
 
         self.album = Some(album);
+        self.compute_filename();
     }
 
     pub fn get_artists_string(&self) -> String {
@@ -223,5 +242,29 @@ impl Song {
             .to_str()
             .unwrap()
             .to_string()
+    }
+
+    pub fn get_new_filename(&self) -> String {
+        self.npath
+            .clone()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    pub fn compute_filename(&mut self) {
+        let fname = format!(
+            "{} - {}.opus",
+            self.title.clone().unwrap_or_else(|| "Unknown".to_string()),
+            self.get_artists_string()
+        );
+
+        if let Some(path) = self.path.clone() {
+            let new_path = path.with_file_name(fname);
+            self.npath = Some(new_path);
+        }
     }
 }

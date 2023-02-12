@@ -140,7 +140,7 @@ fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
             .unwrap()
             .to_string();
 
-        song.title = Some(title);
+        song.set_title(Some(title));
         song.set_artists(artist);
         song.set_albums(album);
         tx.send(Event::UpdateSongDatabase(song)).unwrap();
