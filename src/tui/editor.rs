@@ -53,7 +53,9 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     let select_song = select_song
         .with_name("select_song")
         .scrollable()
-        .min_width(20);
+        .min_width(20)
+        .full_width()
+        .full_height();
     let select_song = Panel::new(select_song).title("Songs");
 
     let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
@@ -61,13 +63,12 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     select_metadata.set_on_submit(move |siv: &mut Cursive, _item: &String| {
         let user_data: &mut State = siv.user_data().unwrap();
         let song = user_data.current_selected_song.as_ref().unwrap().clone();
-        // TODO: show editing prompt
         let editor = editor_layer(siv, song, tx.clone());
         siv.add_layer(editor);
     });
     let select_metadata = select_metadata.with_name("select_metadata");
     let select_metadata = select_metadata.scrollable().min_width(20);
-    let select_metadata = Panel::new(select_metadata).title("Metadata");
+    let select_metadata = Panel::new(select_metadata).title("Metadata").full_width();
 
     let hlayout = LinearLayout::horizontal()
         .child(select_song)
@@ -79,9 +80,12 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
     LinearLayout::vertical()
         .child(TextView::new("Database Editor").h_align(cursive::align::HAlign::Center))
         .child(hlayout)
-        .child(TextView::new(
-            "d - Delete | u - Update list | V - verify all | R - download all missing",
-        ))
+        .child(
+            TextView::new(
+                "d - Delete | u - Update list | V - verify all | R - download all missing",
+            )
+            .h_align(cursive::align::HAlign::Center),
+        )
         .child(
             Panel::new(TextView::new("Standby").with_name("statusbar"))
                 .title("Status Bar")

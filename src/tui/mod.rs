@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::mpsc::Sender};
 
 use cursive::{
-    view::Nameable,
+    view::{Nameable, Resizable},
     views::{Dialog, OnEventView, Panel},
     Cursive, CursiveExt,
 };
@@ -101,7 +101,7 @@ pub fn run_tui() -> Result<()> {
             }),
     )
     .title("muziktui");
-    siv.add_layer(panel);
+    siv.add_fullscreen_layer(panel.full_screen());
 
     siv.add_global_callback('~', Cursive::toggle_debug_console);
     siv.add_global_callback('q', |s| s.quit());
