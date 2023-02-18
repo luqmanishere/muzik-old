@@ -246,7 +246,7 @@ impl Song {
     }
 
     pub fn get_music_dir(&self) -> PathBuf {
-        self.music_dir.clone().unwrap_or_default().clone()
+        self.music_dir.clone().unwrap_or_default()
     }
 
     pub fn get_yt_id(&self) -> String {

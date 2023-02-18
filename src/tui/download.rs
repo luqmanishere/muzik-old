@@ -125,7 +125,7 @@ fn draw_metadata_editor(
                 artist.clone().unwrap_or_default()
             );
             let isong = crate::database::Song::new(
-                music_dir.clone(),
+                music_dir,
                 None,
                 Some(fname),
                 title,
