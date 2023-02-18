@@ -176,6 +176,7 @@ async fn download_command(query: Vec<String>) -> Result<()> {
                         Some(title),
                         Some(album),
                         Some(artist),
+                        Some(video.genre.unwrap_or_else(|| "Unknown".to_string())),
                         Some(id),
                         video.thumbnail,
                     );

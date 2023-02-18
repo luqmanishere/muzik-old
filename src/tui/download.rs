@@ -7,10 +7,7 @@ use cursive::{
 };
 use youtube_dl::SingleVideo;
 
-use super::{
-    event_runner::{Event, YoutubeDownloadOptions},
-    State,
-};
+use super::{event_runner::Event, State};
 
 pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<LinearLayout> {
     let search_box = EditView::new().on_submit(move |siv: &mut Cursive, text: &str| {
@@ -109,31 +106,36 @@ fn draw_metadata_editor(
 
             let music_dir = user_data.music_dir.clone();
             let id = id.clone();
-            let title = siv
-                .call_on_name("title_input", |v: &mut EditView| {
-                    v.get_content().to_string()
-                })
-                .unwrap();
+            // TODO: get genre
+            let genre = song.genre.clone().unwrap_or_else(|| "Unknown".to_string());
+            let title = siv.call_on_name("title_input", |v: &mut EditView| {
+                v.get_content().to_string()
+            });
 
-            let artist = siv
-                .call_on_name("artist_input", |v: &mut EditView| {
-                    v.get_content().to_string()
-                })
-                .unwrap();
-            let album = siv
-                .call_on_name("album_input", |v: &mut EditView| {
-                    v.get_content().to_string()
-                })
-                .unwrap();
-            tx.send(Event::YoutubeDownload(YoutubeDownloadOptions {
-                id,
+            let artist = siv.call_on_name("artist_input", |v: &mut EditView| {
+                v.get_content().to_string()
+            });
+            let album = siv.call_on_name("album_input", |v: &mut EditView| {
+                v.get_content().to_string()
+            });
+
+            let fname = format!(
+                "{} - {}.opus",
+                title.clone().unwrap_or_default(),
+                artist.clone().unwrap_or_default()
+            );
+            let isong = crate::database::Song::new(
+                music_dir.clone(),
+                None,
+                Some(fname),
                 title,
                 album,
                 artist,
-                song: song.clone(),
-                music_dir,
-            }))
-            .unwrap();
+                Some(genre),
+                Some(id),
+                song.thumbnail.clone(),
+            );
+            tx.send(Event::YoutubeDownload(isong)).unwrap();
             siv.pop_layer();
         },
     ));

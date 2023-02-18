@@ -143,6 +143,8 @@ fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
         song.set_title(Some(title));
         song.set_artists(artist);
         song.set_albums(album);
+        // TODO: actually set genre
+        song.set_genre(String::from("Unknown"));
         tx.send(Event::UpdateSongDatabase(song)).unwrap();
         siv.pop_layer();
     })

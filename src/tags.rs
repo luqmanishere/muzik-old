@@ -1,7 +1,7 @@
 use std::{io::Cursor, path::PathBuf};
 
 use eyre::{eyre, Result};
-use lofty::{ItemKey, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
+use lofty::{ItemKey, ItemValue, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
 use tracing::error;
 
 use crate::database::Song;
@@ -158,6 +158,30 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     tag_items.push(tag_item);
                 }
             }
+
+            if let Some(genre) = &song.genre {
+                tag.remove_key(&ItemKey::Genre);
+                for it in genre {
+                    let tag_item = TagItem::new_checked(
+                        tag.tag_type(),
+                        ItemKey::Genre,
+                        ItemValue::Text(it.to_string()),
+                    )
+                    .unwrap();
+
+                    tag_items.push(tag_item);
+                }
+            }
+
+            if let Some(yt_id) = &song.yt_id {
+                tag.remove_key(&ItemKey::Unknown("YTID".to_string()));
+                let tag_item = TagItem::new(
+                    ItemKey::Unknown("YTID".to_string()),
+                    ItemValue::Text(yt_id.to_string()),
+                );
+                tag.insert_item_unchecked(tag_item);
+            }
+
             if let Some(picture_url) = &song.tb_url {
                 if picture_url.contains("http") {
                     let picture = reqwest::blocking::get(picture_url);

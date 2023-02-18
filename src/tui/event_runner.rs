@@ -73,46 +73,39 @@ impl EventRunner {
                     Err(e) => return Err(e),
                 }
             }
-            Event::YoutubeDownload(dl_options) => {
+            Event::YoutubeDownload(song) => {
+                // TODO: Rework these functions to accept and use `Song`
                 debug!(
                     "got id: {}, title: {}, artist: {}, album: {}",
-                    &dl_options.id, &dl_options.title, &dl_options.artist, &dl_options.album
+                    &song.id.unwrap(),
+                    &song.get_title_string(),
+                    &song.get_artists_string(),
+                    &song.get_albums_string(),
                 );
-                let title = dl_options.title.clone();
-                let artist = dl_options.artist.clone();
+                let title = song.get_title_string();
+                let artist = song.get_artists_string();
                 let status_text = format!("Downloading: {}: {}", title, artist);
                 self.notify_ui(status_text);
 
-                let filename_format =
-                    format!("{} - {}.%(ext)s", dl_options.title, dl_options.artist);
-                let filename = format!("{} - {}.opus", dl_options.title, dl_options.artist);
-                let filename = dl_options.music_dir.join(filename);
+                let filename_format = format!("{} - {}.%(ext)s", title, artist);
+                let filename = format!("{} - {}.opus", title, artist);
+                let filename = song.get_music_dir().join(filename);
                 let _youtube = download_from_youtube(
-                    dl_options.id.clone(),
-                    dl_options.music_dir.display().to_string(),
+                    song.get_yt_id(),
+                    song.get_music_dir().display().to_string(),
                     filename_format,
                     self.config.cookies.clone(),
                 )?;
 
                 if filename.exists() {
-                    let title = dl_options.title.clone();
-                    let artist = dl_options.artist.clone();
+                    let title = song.get_title_string();
+                    let artist = song.get_artists_string();
                     let status_text = format!("Download finished for: {} - {}", title, artist);
                     self.notify_ui(status_text);
                 } else {
                     println!("File not found after downloading");
                 }
 
-                let song = Song::new(
-                    dl_options.music_dir,
-                    None,
-                    Some(filename.display().to_string()),
-                    Some(dl_options.title),
-                    Some(dl_options.album),
-                    Some(dl_options.artist),
-                    Some(dl_options.id),
-                    dl_options.song.thumbnail,
-                );
                 self.tx.send(Event::InsertTags(song)).unwrap();
             }
             Event::InsertTags(song) => {
@@ -326,7 +319,7 @@ impl EventRunner {
 
 pub enum Event {
     YoutubeSearch(String),
-    YoutubeDownload(YoutubeDownloadOptions),
+    YoutubeDownload(Song),
     InsertTags(Song),
     InsertSongDatabase(Song),
     UpdateSongDatabase(Song),
@@ -334,15 +327,6 @@ pub enum Event {
     DeleteSongDatabase(Song),
     VerifyAllSongIntegrity(),
     DownloadAllMissingFromDatabase,
-}
-
-pub struct YoutubeDownloadOptions {
-    pub id: String,
-    pub title: String,
-    pub album: String,
-    pub artist: String,
-    pub song: SingleVideo,
-    pub music_dir: PathBuf,
 }
 
 use crate::{config::Config, database::Song, tags, tui::editor};

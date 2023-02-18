@@ -23,6 +23,7 @@ impl Database {
                 artist  TEXT,
                 yt_id   TEXT,
                 tb_url  TEXT
+                genre   TEXT
 )",
             (),
         )?;
@@ -32,7 +33,7 @@ impl Database {
     pub fn get_all(&self, music_dir: PathBuf) -> Result<Vec<Song>> {
         let mut stmt = self.conn.prepare(
             "
-SELECT id,path,title,album,artist,yt_id,tb_url FROM songs
+SELECT id,path,title,album,artist,genre,yt_id,tb_url FROM songs
 ",
         )?;
 
@@ -46,6 +47,7 @@ SELECT id,path,title,album,artist,yt_id,tb_url FROM songs
                 row.get(4).ok(),
                 row.get(5).ok(),
                 row.get(6).ok(),
+                row.get(7).ok(),
             ))
         })?;
         let s_vec = s_iter.map(|s| s.unwrap()).collect::<Vec<Song>>();
@@ -64,9 +66,10 @@ INSERT INTO songs (
                 title,
                 album,
                 artist,
+                genre,
                 yt_id,
                 tb_url
-) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
 ";
                 let fname = if let Some(path) = &song.path {
                     path.file_name().unwrap().to_str().unwrap().to_string()
@@ -80,6 +83,7 @@ INSERT INTO songs (
                         song.title.clone().unwrap_or_else(|| "Unknown".to_string()),
                         song.get_albums_string(),
                         song.get_artists_string(),
+                        song.get_genre_string(),
                         song.yt_id.clone().unwrap_or_else(|| "None".to_string()),
                         song.tb_url.clone().unwrap_or_else(|| "None".to_string())
                     ],
@@ -97,8 +101,9 @@ INSERT INTO songs (
                 title = ?3,
                 album = ?4,
                 artist = ?5,
-                yt_id = ?6,
-                tb_url = ?7
+                genre = ?6,
+                yt_id = ?7,
+                tb_url = ?8
             WHERE id = ?1
         ";
         self.conn.execute(
@@ -113,6 +118,7 @@ INSERT INTO songs (
                 song.title,
                 song.get_albums_string(),
                 song.get_artists_string(),
+                song.get_genre_string(),
                 song.yt_id,
                 song.tb_url
             ],
@@ -142,16 +148,17 @@ INSERT INTO songs (
 pub struct Song {
     pub id: Option<usize>,
     /// Full path to file
+    pub music_dir: Option<PathBuf>,
     pub path: Option<PathBuf>,
     pub title: Option<String>,
     pub album: Option<Vec<String>>,
     pub artist: Option<Vec<String>>,
+    pub genre: Option<Vec<String>>,
     pub yt_id: Option<String>,
     pub tb_url: Option<String>,
     pub npath: Option<PathBuf>,
 }
 
-#[allow(dead_code)]
 impl Song {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -161,10 +168,12 @@ impl Song {
         title: Option<String>,
         album: Option<String>,
         artist: Option<String>,
+        genre: Option<String>,
         yt_id: Option<String>,
         tb_url: Option<String>,
     ) -> Self {
         let path = fname.map(|fname| music_dir.join(fname));
+        let music_dir = Some(music_dir);
 
         let album = album.map(|album| {
             album
@@ -180,12 +189,21 @@ impl Song {
                 .collect::<Vec<_>>()
         });
 
+        let genre = genre.map(|genre| {
+            genre
+                .split(';')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<_>>()
+        });
+
         Self {
             id,
             path,
+            music_dir,
             title,
             album,
             artist,
+            genre,
             yt_id,
             tb_url,
             npath: None,
@@ -217,6 +235,37 @@ impl Song {
         self.compute_filename();
     }
 
+    pub fn set_genre(&mut self, genre: String) {
+        let genre = genre
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        self.genre = Some(genre);
+        self.compute_filename();
+    }
+
+    pub fn get_music_dir(&self) -> PathBuf {
+        self.music_dir.clone().unwrap_or_default().clone()
+    }
+
+    pub fn get_yt_id(&self) -> String {
+        // note: we should fail if there is no ID
+        // FIXME: fail when no id is here
+        if let Some(yt_id) = &self.yt_id {
+            yt_id.clone()
+        } else {
+            "Unknonw".to_string()
+        }
+    }
+
+    pub fn get_title_string(&self) -> String {
+        if let Some(title) = &self.title {
+            title.clone()
+        } else {
+            "Unknonw".to_string()
+        }
+    }
     pub fn get_artists_string(&self) -> String {
         if let Some(artist) = &self.artist {
             artist.join("; ")
@@ -228,6 +277,14 @@ impl Song {
     pub fn get_albums_string(&self) -> String {
         if let Some(album) = &self.album {
             album.join("; ")
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    pub fn get_genre_string(&self) -> String {
+        if let Some(genre) = &self.genre {
+            genre.join("; ")
         } else {
             "Unknown".to_string()
         }
