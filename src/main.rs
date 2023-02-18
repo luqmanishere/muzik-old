@@ -209,7 +209,8 @@ async fn download_command(query: Vec<String>) -> Result<()> {
 }
 
 async fn list_command() -> Result<()> {
-    let db = Database::new("/home/luqman/Music/database.sqlite".into())?;
+    let config = Config::default();
+    let db = Database::new(config.get_music_dir().join("database.sqlite"))?;
     let e = db.get_all("/home/luqman/Music".into())?;
 
     if e.is_empty() {
