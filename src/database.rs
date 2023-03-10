@@ -22,7 +22,7 @@ impl Database {
                 album   TEXT,
                 artist  TEXT,
                 yt_id   TEXT,
-                tb_url  TEXT
+                tb_url  TEXT,
                 genre   TEXT
 )",
             (),
