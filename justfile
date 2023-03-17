@@ -6,4 +6,4 @@ tui:
     cargo r -- tui
 
 tui-nix:
-    nix run . -- tui
+    RUST_LOG=DEBUG nix run . -- tui
