@@ -70,18 +70,21 @@ impl EventRunner {
                             }))
                             .unwrap();
                     }
-                    Err(e) => return Err(e),
+                    Err(e) => return Err(e.wrap_err("error while searching youtube")),
                 }
             }
             Event::YoutubeDownload(song) => {
-                // TODO: Rework these functions to accept and use `Song`
-                debug!(
-                    "got id: {}, title: {}, artist: {}, album: {}",
-                    &song.id.unwrap(),
-                    &song.get_title_string(),
-                    &song.get_artists_string(),
-                    &song.get_albums_string(),
-                );
+                // {
+                //     let id = song.id.unwrap();
+                //     let title = song.get_title_string();
+                //     let artist = song.get_artists_string();
+                //     let album = song.get_albums_string();
+                //     debug!(
+                //         "got id: {}, title: {}, artist: {}, album: {}",
+                //         id, title, artist, album
+                //     );
+                // }
+                debug!("try");
                 let title = song.get_title_string();
                 let artist = song.get_artists_string();
                 let status_text = format!("Downloading: {}: {}", title, artist);

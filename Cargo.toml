@@ -18,7 +18,7 @@ image = "0.24"
 reqwest = {version = "0.11" ,features = ["blocking"]}
 directories = "4"
 rusqlite = {version = "0.28", features = ["bundled"]}
-lofty = {git = "https://github.com/Serial-ATA/lofty-rs"}
+lofty = {version = "0.11"}
 cursive = {version = "0.20", default-features = false, features = ["crossterm-backend", "toml"]}
 cursive-tabs = "^0"
 send_wrapper = "0.6.0"
