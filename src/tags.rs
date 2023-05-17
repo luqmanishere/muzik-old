@@ -90,7 +90,7 @@ pub async fn write_tags_async(path: PathBuf, song: &Song) -> Result<()> {
             }
 
             for tag_item in tag_items {
-                tag.push_item(tag_item);
+                tag.push(tag_item);
             }
 
             tag.save_to_path(path)?;
@@ -179,7 +179,7 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     ItemKey::Unknown("YTID".to_string()),
                     ItemValue::Text(yt_id.to_string()),
                 );
-                tag.insert_item_unchecked(tag_item);
+                tag.insert_unchecked(tag_item);
             }
 
             if let Some(picture_url) = &song.tb_url {
@@ -207,7 +207,7 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
             }
 
             for tag_item in tag_items {
-                tag.push_item(tag_item);
+                tag.push(tag_item);
             }
 
             tag.save_to_path(path)?;
