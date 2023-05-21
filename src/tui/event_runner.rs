@@ -9,6 +9,13 @@ use eyre::{Context, Result};
 use tracing::{debug, error, info, warn};
 use youtube_dl::{SearchOptions, SingleVideo, YoutubeDl, YoutubeDlOutput};
 
+#[derive(Default)]
+struct AppState {
+    song_list: Option<Vec<Song>>,
+    song_index: Option<usize>,
+    current_selected_song: Option<Song>,
+}
+
 #[allow(dead_code)]
 pub struct EventRunner {
     thread_handle: Option<JoinHandle<()>>,
@@ -16,6 +23,7 @@ pub struct EventRunner {
     tx: Sender<Event>,
     rx: Receiver<Event>,
     config: Config,
+    state: AppState,
 }
 use cursive::{
     view::Scrollable,
@@ -32,10 +40,11 @@ impl EventRunner {
             tx,
             rx,
             config,
+            state: Default::default(),
         }
     }
 
-    pub fn process(&self) -> Result<()> {
+    pub fn process(&mut self) -> Result<()> {
         // TODO: remove unwraps
         match self.rx.recv().unwrap() {
             Event::YoutubeSearch(kw) => {
@@ -138,6 +147,7 @@ impl EventRunner {
                 match tags::write_tags(filename.into(), &song) {
                     Ok(_) => {
                         info!("wrote tags to file successfully");
+                        self.tx.send(Event::ChangeFilename(song))?;
                     }
                     Err(e) => {
                         error!("error writing tags: {}", e);
@@ -151,9 +161,7 @@ impl EventRunner {
                     let status_text =
                         format!("Done inserting into database for {} - {}", title, artist);
                     self.notify_ui(status_text);
-                    self.cb_sink
-                        .send(Box::new(editor::update_database))
-                        .unwrap();
+                    self.tx.send(Event::UpdateLocalDatabase)?;
                     info!("inserted into database successfully");
                 }
                 Err(e) => {
@@ -163,7 +171,8 @@ impl EventRunner {
             Event::UpdateSongDatabase(song) => match self.config.db.update_song(&song) {
                 Ok(_) => {
                     info!("updated song in database");
-                    self.tx.send(Event::UpdateTags(song)).unwrap();
+                    self.tx.send(Event::UpdateTags(song))?;
+                    self.tx.send(Event::UpdateLocalDatabase)?;
                 }
                 Err(e) => {
                     error!("failed to update song in database: {}", e);
@@ -174,13 +183,18 @@ impl EventRunner {
                     Ok(_) => {
                         info!("deleted song from database");
                         std::fs::remove_file(song.path.unwrap()).unwrap_or_default();
-                        self.cb_sink
-                            .send(Box::new(editor::update_database))
-                            .unwrap();
+                        self.tx.send(Event::UpdateLocalDatabase)?;
                     }
                     Err(e) => {
                         error!("can't delete record from db: {}", e);
                     }
+                }
+            }
+            Event::ChangeFilename(song) => {
+                if let Some(npath) = song.npath {
+                    std::fs::rename(song.path.as_ref().unwrap(), npath)?;
+                } else {
+                    debug!("no path changes needed");
                 }
             }
             Event::VerifyAllSongIntegrity() => {
@@ -272,36 +286,92 @@ impl EventRunner {
                 for song in song_list {
                     let path = song.path.as_ref().unwrap().clone();
                     if !path.exists() {
-                        // TODO: download with metadata
-                        let title = song.title.clone().unwrap();
-                        let artist = song.get_artists_string();
-                        let status_text = format!("Downloading: {}: {}", title, artist);
-                        self.notify_ui(status_text);
-
-                        let title = song.title.clone().unwrap();
-                        let artist = song.get_artists_string();
-                        let filename_format = format!("{} - {}.%(ext)s", title, artist);
-                        let filename_full = path.clone();
-                        let yt_id = song.yt_id.as_ref().unwrap().clone();
-                        let _youtube = download_from_youtube(
-                            yt_id,
-                            self.config.music_dir.display().to_string(),
-                            filename_format,
-                            self.config.cookies.clone(),
-                        )?;
-
-                        if filename_full.exists() {
-                            let title = song.title.clone().unwrap();
-                            let artist = song.get_artists_string();
-                            let status_text =
-                                format!("Download finished for: {} - {}", title, artist);
-                            self.notify_ui(status_text);
-                        } else {
-                            println!("File not found after downloading");
-                        }
-                        self.tx.send(Event::InsertTags(song)).unwrap();
+                        self.tx.send(Event::YoutubeDownload(song))?;
                     }
                 }
+            }
+            Event::UpdateLocalDatabase => {
+                let song_list = self.config.db.get_all(self.config.music_dir.clone())?;
+                self.state.song_list = Some(song_list);
+                self.tx.send(Event::UpdateEditorSongSelectView)?;
+                self.tx.send(Event::UpdateEditorMetadataSelectView(
+                    self.state.song_index.unwrap_or(0),
+                ))?;
+                self.notify_ui("updated local database".to_string());
+            }
+            Event::UpdateEditorSongSelectView => {
+                let song_list = self.config.db.get_all(self.config.music_dir.clone())?;
+                self.state.song_list = Some(song_list);
+                let index = self.state.song_index.unwrap_or(0);
+
+                let song_list = self.state.song_list.clone().unwrap();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        let select_song_list = song_list
+                            .iter()
+                            .enumerate()
+                            .map(|(ind, f)| {
+                                (
+                                    format!(
+                                        "{} - {}",
+                                        f.get_title_string(),
+                                        f.get_artists_string()
+                                    ),
+                                    ind,
+                                )
+                            })
+                            .into_iter();
+                        siv.call_on_name("select_song", |view: &mut SelectView<usize>| {
+                            view.clear();
+                            view.add_all(select_song_list);
+                            view.set_selection(index);
+                        });
+                    }))
+                    .unwrap();
+            }
+            Event::UpdateEditorMetadataSelectView(index) => {
+                self.state.song_index = Some(index);
+                let mut song_list = self.state.song_list.clone().unwrap();
+                let song = song_list.get_mut(index).unwrap();
+                self.state.current_selected_song = Some(song.clone());
+                let song = song.clone();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        siv.call_on_name("select_metadata", |view: &mut SelectView<String>| {
+                            view.clear();
+                            let title = song.get_title_string();
+                            let artist = song.get_artists_string();
+                            let album = song.get_albums_string();
+                            view.add_item(title.clone(), title.clone());
+                            view.add_item(artist.clone(), artist);
+                            view.add_item(album.clone(), album);
+                        });
+                    }))
+                    .unwrap();
+            }
+            Event::OnMetadataSelect => {
+                let song = self.state.current_selected_song.as_ref().unwrap().clone();
+                let ttx = self.tx.clone();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        let editor = editor_layer(siv, song, ttx.clone());
+                        siv.add_layer(editor);
+                    }))
+                    .unwrap();
+            }
+
+            Event::OnDeleteKey => {
+                let mut song_list = self.state.song_list.clone().unwrap();
+                let tx = self.get_tx();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        siv.call_on_name("select_song", |view: &mut SelectView<usize>| {
+                            let item = view.selection().unwrap();
+                            let song = song_list.get_mut(*item).unwrap().clone();
+                            tx.send(Event::DeleteSongDatabase(song)).unwrap();
+                        });
+                    }))
+                    .unwrap();
             }
         }
         Ok(())
@@ -330,11 +400,21 @@ pub enum Event {
     DeleteSongDatabase(Song),
     VerifyAllSongIntegrity(),
     DownloadAllMissingFromDatabase,
+    ChangeFilename(Song),
+
+    UpdateLocalDatabase,
+    UpdateEditorSongSelectView,
+    UpdateEditorMetadataSelectView(usize),
+    OnMetadataSelect,
+    OnDeleteKey,
 }
 
-use crate::{config::Config, database::Song, tags, tui::editor};
+use crate::database::Song;
+use crate::{config::Config, tags};
 
 use eyre::eyre;
+
+use super::editor::editor_layer;
 
 fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVideo>> {
     let yt_search = if !kw.contains("http") {

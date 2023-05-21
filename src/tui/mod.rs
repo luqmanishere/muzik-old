@@ -37,7 +37,7 @@ pub fn run_tui() -> Result<()> {
         }
     };
     let conf = Config::default();
-    let ev_man = event_runner::EventRunner::new(siv.cb_sink().clone(), conf);
+    let mut ev_man = event_runner::EventRunner::new(siv.cb_sink().clone(), conf);
     let tx = ev_man.get_tx();
     let tx_us = ev_man.get_tx();
     std::thread::spawn(move || loop {
@@ -67,14 +67,27 @@ pub fn run_tui() -> Result<()> {
     });
     siv.load_toml(include_str!("theme.toml")).unwrap();
 
+    let update_tx = tx.clone();
+    let delete_tx = tx.clone();
+    let verify_tx = tx.clone();
+    let missing_tx = tx.clone();
+
     let mut tab_panel = TabPanel::new();
     tab_panel.set_bar_alignment(cursive_tabs::Align::Center);
     tab_panel.add_tab(
-        OnEventView::new(editor::draw_database_editor(&mut siv, tx.clone()))
-            .on_event('u', editor::update_database)
-            .on_event('d', editor::delete_from_database)
-            .on_event('V', editor::verify_all_song_integrity)
-            .on_event('R', editor::download_all_missing)
+        OnEventView::new(editor::draw_database_editor(tx.clone()))
+            .on_event('u', move |_| {
+                update_tx.send(Event::UpdateLocalDatabase).unwrap()
+            })
+            .on_event('d', move |_| delete_tx.send(Event::OnDeleteKey).unwrap())
+            .on_event('V', move |_| {
+                verify_tx.send(Event::VerifyAllSongIntegrity()).unwrap()
+            })
+            .on_event('R', move |_| {
+                missing_tx
+                    .send(Event::DownloadAllMissingFromDatabase)
+                    .unwrap()
+            })
             .with_name("Editor"),
     );
     tab_panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));

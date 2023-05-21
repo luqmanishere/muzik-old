@@ -123,10 +123,6 @@ INSERT INTO songs (
                 song.tb_url
             ],
         )?;
-        // Rename file if updated
-        if let Some(new_path) = song.npath.clone() {
-            std::fs::rename(song.path.as_ref().unwrap(), new_path)?;
-        }
         Ok(())
     }
     pub fn delete_entry_by_id(&self, id: usize) -> Result<()> {
@@ -322,6 +318,24 @@ impl Song {
         if let Some(path) = self.path.clone() {
             let new_path = path.with_file_name(fname);
             self.npath = Some(new_path);
+        }
+    }
+}
+
+/// This `Default` impl is only meant to be used as a placeholder
+impl Default for Song {
+    fn default() -> Self {
+        Self {
+            id: None,
+            music_dir: None,
+            path: None,
+            title: None,
+            album: None,
+            artist: None,
+            genre: None,
+            yt_id: None,
+            tb_url: None,
+            npath: None,
         }
     }
 }

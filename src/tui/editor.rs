@@ -8,47 +8,25 @@ use cursive::{
 
 use crate::database::Song;
 
-use super::{event_runner::Event, State};
+use super::event_runner::Event;
 
-pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayout {
-    let user_data: &mut State = siv.user_data().unwrap();
-    let song_list = match &user_data.song_list {
-        Some(sl) => sl.clone(),
-        None => {
-            if let Some(db) = &user_data.db {
-                let song_list = db.get_all(user_data.music_dir.clone()).unwrap();
-                siv.with_user_data(|f: &mut State| f.song_list = Some(song_list.clone()));
-                song_list
-            } else {
-                vec![]
-            }
-        }
-    };
-
-    let select_song_list = song_list.iter().enumerate().map(|(ind, f)| {
+pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
+    // Default before data is loaded in
+    let list = vec![Song::default()];
+    let select_song_list = list.iter().enumerate().map(|(ind, f)| {
         (
-            format!("{} - {}", f.title.clone().unwrap(), f.get_artists_string()),
+            format!("{} - {}", f.get_title_string(), f.get_artists_string()),
             ind,
         )
     });
     let mut select_song = SelectView::new();
     select_song.add_all(select_song_list.into_iter());
+    tx.send(Event::UpdateEditorSongSelectView).unwrap();
 
-    let select_song = select_song.on_submit(|siv, item| {
-        let user_data: &mut State = siv.user_data().unwrap();
-        user_data.song_index = Some(*item);
-        let mut song_list = user_data.song_list.clone().unwrap();
-        let song = song_list.get_mut(*item).unwrap();
-        user_data.current_selected_song = Some(song.clone());
-        siv.call_on_name("select_metadata", |view: &mut SelectView<String>| {
-            view.clear();
-            let title = song.title.as_ref().unwrap();
-            let artist = song.get_artists_string();
-            let album = song.get_albums_string();
-            view.add_item(title.clone(), title.clone());
-            view.add_item(artist.clone(), artist);
-            view.add_item(album.clone(), album);
-        });
+    let ttx = tx.clone();
+    let select_song = select_song.on_submit(move |_, index| {
+        ttx.send(Event::UpdateEditorMetadataSelectView(*index))
+            .unwrap();
     });
     let select_song = select_song
         .with_name("select_song")
@@ -58,13 +36,11 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
         .full_height();
     let select_song = Panel::new(select_song).title("Songs");
 
+    // Metadata SelectView entries are dynamically updated
     let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
-    let tx = tx;
-    select_metadata.set_on_submit(move |siv: &mut Cursive, _item: &String| {
-        let user_data: &mut State = siv.user_data().unwrap();
-        let song = user_data.current_selected_song.as_ref().unwrap().clone();
-        let editor = editor_layer(siv, song, tx.clone());
-        siv.add_layer(editor);
+    let ttx = tx.clone();
+    select_metadata.set_on_submit(move |_siv: &mut Cursive, _item: &String| {
+        ttx.send(Event::OnMetadataSelect).unwrap();
     });
     let select_metadata = select_metadata.with_name("select_metadata");
     let select_metadata = select_metadata.scrollable().min_width(20);
@@ -93,7 +69,7 @@ pub fn draw_database_editor(siv: &mut Cursive, tx: Sender<Event>) -> LinearLayou
         )
 }
 
-fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
+pub fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
     let left_layout = LinearLayout::vertical()
         .child(TextView::new("Title:"))
         .child(TextView::new("Artist"))
@@ -148,46 +124,4 @@ fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
         tx.send(Event::UpdateSongDatabase(song)).unwrap();
         siv.pop_layer();
     })
-}
-
-pub fn update_database(siv: &mut Cursive) {
-    let user_data: &mut State = siv.user_data().unwrap();
-    let db = user_data.db.as_ref().unwrap();
-    let song_list = db.get_all(user_data.music_dir.clone()).unwrap();
-    siv.with_user_data(|f: &mut State| f.song_list = Some(song_list.clone()));
-
-    let select_song_list = song_list.iter().enumerate().map(|(ind, f)| {
-        (
-            format!("{} - {}", f.title.clone().unwrap(), f.get_artists_string()),
-            ind,
-        )
-    });
-
-    siv.call_on_name("select_song", |view: &mut SelectView<usize>| {
-        view.clear();
-        view.add_all(select_song_list.into_iter());
-    });
-}
-
-pub fn delete_from_database(siv: &mut Cursive) {
-    let user_data: &mut State = siv.user_data().unwrap();
-    let mut song_list = user_data.song_list.clone().unwrap();
-    let tx = user_data.tx.clone();
-    siv.call_on_name("select_song", |view: &mut SelectView<usize>| {
-        let item = view.selection().unwrap();
-        let song = song_list.get_mut(*item).unwrap().clone();
-        tx.send(Event::DeleteSongDatabase(song)).unwrap();
-    });
-}
-
-pub fn verify_all_song_integrity(siv: &mut Cursive) {
-    let user_data: &mut State = siv.user_data().unwrap();
-    let tx = user_data.tx.clone();
-    tx.send(Event::VerifyAllSongIntegrity()).unwrap();
-}
-
-pub fn download_all_missing(siv: &mut Cursive) {
-    let user_data: &mut State = siv.user_data().unwrap();
-    let tx = user_data.tx.clone();
-    tx.send(Event::DownloadAllMissingFromDatabase).unwrap();
 }
