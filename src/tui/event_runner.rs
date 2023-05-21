@@ -60,15 +60,11 @@ impl EventRunner {
                                     .iter()
                                     .enumerate()
                                     .map(|(_ind, e)| (e.title.to_string(), e.to_owned()));
-                                let mut select_entry = SelectView::new();
-                                select_entry.add_all(items.into_iter());
-                                select_entry.set_on_submit(super::download::start_download);
-                                let select_entry = Dialog::around(select_entry.scrollable());
                                 siv.call_on_name(
-                                    "download_v_layout",
-                                    |layout: &mut LinearLayout| {
-                                        layout.remove_child(2);
-                                        layout.insert_child(2, select_entry);
+                                    "result_selectview",
+                                    |view: &mut SelectView<SingleVideo>| {
+                                        view.clear();
+                                        view.add_all(items);
                                     },
                                 );
                                 // Notify on finish loading
@@ -373,6 +369,53 @@ impl EventRunner {
                     }))
                     .unwrap();
             }
+            Event::OnDownloadMetadataSubmit(metadata) => {
+                let music_dir = self.config.music_dir.clone();
+                let genre = metadata.genre.unwrap_or("Unknown".to_string());
+
+                let fname = format!(
+                    "{} - {}.opus",
+                    metadata.title.clone().unwrap_or_default(),
+                    metadata.artist.clone().unwrap_or_default()
+                );
+                let song = crate::database::Song::new(
+                    music_dir,
+                    None,
+                    Some(fname),
+                    metadata.title,
+                    metadata.album,
+                    metadata.artist,
+                    Some(genre),
+                    Some(metadata.id),
+                    metadata.video.thumbnail.clone(),
+                );
+                self.tx.send(Event::YoutubeDownload(song)).unwrap();
+            }
+            Event::OnDownloadVideoSelect(video) => {
+                // Show popup to confirm
+                let title = video.title.clone();
+                let channel = video
+                    .channel
+                    .clone()
+                    .unwrap_or_else(|| "Unknown".to_string());
+                let song2 = video.clone();
+
+                let ttx = self.get_tx();
+                self.cb_sink
+                    .send(Box::new(move |siv: &mut Cursive| {
+                        let confirm = Dialog::text(format!(
+                            "Title: {}\nChannel:{}\nConfirm? to edit?",
+                            title, channel
+                        ))
+                        .dismiss_button("Cancel")
+                        .button("Edit", move |siv: &mut Cursive| {
+                            siv.pop_layer();
+                            draw_metadata_editor(siv, song2.clone(), ttx.clone());
+                        });
+                        siv.add_layer(confirm);
+                    }))
+                    .unwrap();
+            }
         }
         Ok(())
     }
@@ -407,10 +450,21 @@ pub enum Event {
     UpdateEditorMetadataSelectView(usize),
     OnMetadataSelect,
     OnDeleteKey,
+    OnDownloadVideoSelect(SingleVideo),
+    OnDownloadMetadataSubmit(DownloadMetadataInput),
 }
 
-use crate::database::Song;
+pub struct DownloadMetadataInput {
+    pub id: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub video: SingleVideo,
+}
+
 use crate::{config::Config, tags};
+use crate::{database::Song, tui::download::draw_metadata_editor};
 
 use eyre::eyre;
 

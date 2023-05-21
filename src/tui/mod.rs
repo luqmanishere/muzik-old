@@ -57,14 +57,6 @@ pub fn run_tui() -> Result<()> {
         };
     });
 
-    siv.set_user_data(State {
-        db,
-        music_dir,
-        song_list: None,
-        song_index: None,
-        tx: tx_us,
-        current_selected_song: None,
-    });
     siv.load_toml(include_str!("theme.toml")).unwrap();
 
     let update_tx = tx.clone();
@@ -120,13 +112,4 @@ pub fn run_tui() -> Result<()> {
     siv.add_global_callback('q', |s| s.quit());
     siv.run();
     Ok(())
-}
-
-struct State {
-    db: Option<Database>,
-    music_dir: PathBuf,
-    song_list: Option<Vec<Song>>,
-    song_index: Option<usize>,
-    tx: Sender<Event>,
-    current_selected_song: Option<Song>,
 }

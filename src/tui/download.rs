@@ -1,27 +1,41 @@
 use std::sync::mpsc::Sender;
 
 use cursive::{
-    view::{Nameable, Resizable},
-    views::{Dialog, EditView, LinearLayout, NamedView, Panel, TextView},
+    view::{Nameable, Resizable, Scrollable},
+    views::{Dialog, EditView, LinearLayout, NamedView, Panel, SelectView, TextView},
     Cursive,
 };
 use youtube_dl::SingleVideo;
 
-use super::{event_runner::Event, State};
+use super::event_runner::{DownloadMetadataInput, Event};
 
 pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<LinearLayout> {
+    let search_box_tx = tx.clone();
     let search_box = EditView::new().on_submit(move |siv: &mut Cursive, text: &str| {
         if !text.is_empty() {
-            tx.send(Event::YoutubeSearch(text.to_string())).unwrap();
+            search_box_tx
+                .send(Event::YoutubeSearch(text.to_string()))
+                .unwrap();
         } else {
             siv.add_layer(Dialog::text("Can't search for nothingness").dismiss_button("Dismiss"));
         }
     });
 
+    let video_select_tx = tx.clone();
     LinearLayout::vertical()
         .child(TextView::new("Search:"))
         .child(search_box)
-        .child(TextView::new("No results"))
+        .child(Dialog::around(
+            SelectView::<SingleVideo>::new()
+                .on_submit(move |_, video| {
+                    // send selection to the event thread
+                    video_select_tx
+                        .send(Event::OnDownloadVideoSelect(video.clone()))
+                        .unwrap();
+                })
+                .with_name("result_selectview")
+                .scrollable(),
+        ))
         .child(
             Panel::new(TextView::new("Standby").with_name("statusbar"))
                 .title("Status Bar")
@@ -30,47 +44,19 @@ pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<Lin
         .with_name("download_v_layout")
 }
 
-pub fn start_download(siv: &mut Cursive, song: &SingleVideo) {
-    // Show popup to confirm
+pub fn draw_metadata_editor(siv: &mut Cursive, song: SingleVideo, tx: Sender<Event>) {
+    let id = song.id.clone();
     let title = song.title.clone();
-    let channel = song
-        .channel
-        .clone()
-        .unwrap_or_else(|| "Unknown".to_string());
-    let song2 = song.clone();
-    let confirm = Dialog::text(format!(
-        "Title: {}\nChannel:{}\nConfirm? to edit?",
-        title, channel
-    ))
-    .dismiss_button("Cancel")
-    .button("Edit", move |siv: &mut Cursive| {
-        let id = song2.id.clone();
-        let title = song2.title.clone();
-        let artist = {
-            if let Some(artist) = song2.artist.clone() {
-                artist
-            } else if let Some(channel) = song2.channel.clone() {
-                channel
-            } else {
-                "Unknown".to_string()
-            }
-        };
-        let album = song2.album.clone().unwrap_or_else(|| "Unknown".to_string());
-
-        siv.pop_layer();
-        draw_metadata_editor(siv, id, title, artist, album, song2.clone());
-    });
-    siv.add_layer(confirm);
-}
-
-fn draw_metadata_editor(
-    siv: &mut Cursive,
-    id: String,
-    title: String,
-    artist: String,
-    album: String,
-    song: SingleVideo,
-) {
+    let artist = {
+        if let Some(artist) = song.artist.clone() {
+            artist
+        } else if let Some(channel) = song.channel.clone() {
+            channel
+        } else {
+            "Unknown".to_string()
+        }
+    };
+    let album = song.album.clone().unwrap_or_else(|| "Unknown".to_string());
     let left = LinearLayout::vertical()
         .child(TextView::new("Title"))
         .child(TextView::new("Artist"))
@@ -101,10 +87,10 @@ fn draw_metadata_editor(
     siv.add_layer(Dialog::around(hlayout).dismiss_button("Cancel").button(
         "Ok",
         move |siv: &mut Cursive| {
-            let user_data: &mut State = siv.user_data().unwrap();
-            let tx = user_data.tx.clone();
-
-            let music_dir = user_data.music_dir.clone();
+            // Get the inputs, then send them to event runner
+            //
+            //
+            let video = song.clone();
             let id = id.clone();
             // TODO: get genre
             let genre = song.genre.clone().unwrap_or_else(|| "Unknown".to_string());
@@ -119,23 +105,16 @@ fn draw_metadata_editor(
                 v.get_content().to_string()
             });
 
-            let fname = format!(
-                "{} - {}.opus",
-                title.clone().unwrap_or_default(),
-                artist.clone().unwrap_or_default()
-            );
-            let isong = crate::database::Song::new(
-                music_dir,
-                None,
-                Some(fname),
+            let met = DownloadMetadataInput {
+                id,
                 title,
-                album,
                 artist,
-                Some(genre),
-                Some(id),
-                song.thumbnail.clone(),
-            );
-            tx.send(Event::YoutubeDownload(isong)).unwrap();
+                album,
+                genre: Some(genre),
+                video,
+            };
+
+            tx.send(Event::OnDownloadMetadataSubmit(met)).unwrap();
             siv.pop_layer();
         },
     ));
