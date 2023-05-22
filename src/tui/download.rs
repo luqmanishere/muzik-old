@@ -21,7 +21,7 @@ pub fn draw_download_tab(_siv: &mut Cursive, tx: Sender<Event>) -> NamedView<Lin
         }
     });
 
-    let video_select_tx = tx.clone();
+    let video_select_tx = tx;
     LinearLayout::vertical()
         .child(TextView::new("Search:"))
         .child(search_box)

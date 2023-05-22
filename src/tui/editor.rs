@@ -38,7 +38,7 @@ pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
 
     // Metadata SelectView entries are dynamically updated
     let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
-    let ttx = tx.clone();
+    let ttx = tx;
     select_metadata.set_on_submit(move |_siv: &mut Cursive, _item: &String| {
         ttx.send(Event::OnMetadataSelect).unwrap();
     });

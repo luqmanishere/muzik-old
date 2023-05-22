@@ -302,20 +302,12 @@ impl EventRunner {
                 let song_list = self.state.song_list.clone().unwrap();
                 self.cb_sink
                     .send(Box::new(move |siv: &mut Cursive| {
-                        let select_song_list = song_list
-                            .iter()
-                            .enumerate()
-                            .map(|(ind, f)| {
-                                (
-                                    format!(
-                                        "{} - {}",
-                                        f.get_title_string(),
-                                        f.get_artists_string()
-                                    ),
-                                    ind,
-                                )
-                            })
-                            .into_iter();
+                        let select_song_list = song_list.iter().enumerate().map(|(ind, f)| {
+                            (
+                                format!("{} - {}", f.get_title_string(), f.get_artists_string()),
+                                ind,
+                            )
+                        });
                         siv.call_on_name("select_song", |view: &mut SelectView<usize>| {
                             view.clear();
                             view.add_all(select_song_list);
@@ -337,7 +329,7 @@ impl EventRunner {
                             let title = song.get_title_string();
                             let artist = song.get_artists_string();
                             let album = song.get_albums_string();
-                            view.add_item(title.clone(), title.clone());
+                            view.add_item(title.clone(), title);
                             view.add_item(artist.clone(), artist);
                             view.add_item(album.clone(), album);
                         });
@@ -349,7 +341,7 @@ impl EventRunner {
                 let ttx = self.tx.clone();
                 self.cb_sink
                     .send(Box::new(move |siv: &mut Cursive| {
-                        let editor = editor_layer(siv, song, ttx.clone());
+                        let editor = editor_layer(siv, song, ttx);
                         siv.add_layer(editor);
                     }))
                     .unwrap();
@@ -386,7 +378,7 @@ impl EventRunner {
                     metadata.artist,
                     Some(genre),
                     Some(metadata.id),
-                    metadata.video.thumbnail.clone(),
+                    metadata.video.thumbnail,
                 );
                 self.tx.send(Event::YoutubeDownload(song)).unwrap();
             }
@@ -397,7 +389,7 @@ impl EventRunner {
                     .channel
                     .clone()
                     .unwrap_or_else(|| "Unknown".to_string());
-                let song2 = video.clone();
+                let song2 = video;
 
                 let ttx = self.get_tx();
                 self.cb_sink
@@ -497,16 +489,14 @@ fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVide
             youtube_dl::YoutubeDlOutput::SingleVideo(video) => Ok(vec![*video]),
         },
         Err(err) => match err {
-            youtube_dl::Error::Io(e) => return Err(eyre!("error during I/O: {}", e)),
-            youtube_dl::Error::Json(e) => return Err(eyre!("error parsing JSON: {}", e)),
-            youtube_dl::Error::ExitCode { code, stderr } => {
-                return Err(eyre!(
-                    "process returned code: {}, with stderr: {}",
-                    code,
-                    stderr
-                ))
-            }
-            youtube_dl::Error::ProcessTimeout => return Err(eyre!("process timed out")),
+            youtube_dl::Error::Io(e) => Err(eyre!("error during I/O: {}", e)),
+            youtube_dl::Error::Json(e) => Err(eyre!("error parsing JSON: {}", e)),
+            youtube_dl::Error::ExitCode { code, stderr } => Err(eyre!(
+                "process returned code: {}, with stderr: {}",
+                code,
+                stderr
+            )),
+            youtube_dl::Error::ProcessTimeout => Err(eyre!("process timed out")),
         },
     }
 }
