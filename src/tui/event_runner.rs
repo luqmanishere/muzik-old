@@ -26,8 +26,7 @@ pub struct EventRunner {
     state: AppState,
 }
 use cursive::{
-    view::Scrollable,
-    views::{Dialog, LinearLayout, SelectView, TextView},
+    views::{Dialog, SelectView, TextView},
     CbSink, Cursive,
 };
 impl EventRunner {

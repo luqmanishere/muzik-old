@@ -1,19 +1,13 @@
-use std::{path::PathBuf, sync::mpsc::Sender};
-
 use cursive::{
     view::{Nameable, Resizable},
     views::{Dialog, OnEventView, Panel},
     Cursive, CursiveExt,
 };
 use cursive_tabs::TabPanel;
-use directories::UserDirs;
 use eyre::Result;
 use tracing::error;
 
-use crate::{
-    config::Config,
-    database::{Database, Song},
-};
+use crate::config::Config;
 
 use self::event_runner::Event;
 
@@ -24,22 +18,9 @@ mod event_runner;
 pub fn run_tui() -> Result<()> {
     let mut siv = Cursive::new();
     // TODO: only use 1 config
-    let music_dir = if let Ok(_termux_ver) = std::env::var("TERMUX_VERSION") {
-        PathBuf::from(std::env::var("HOME").unwrap()).join("storage/music")
-    } else {
-        UserDirs::new().unwrap().audio_dir().unwrap().to_path_buf()
-    };
-    let db = match Database::new(music_dir.join("database.sqlite")) {
-        Ok(db) => Some(db),
-        Err(e) => {
-            error!("Error connecting to database: {}", e);
-            None
-        }
-    };
     let conf = Config::default();
     let mut ev_man = event_runner::EventRunner::new(siv.cb_sink().clone(), conf);
     let tx = ev_man.get_tx();
-    let tx_us = ev_man.get_tx();
     std::thread::spawn(move || loop {
         match ev_man.process() {
             Ok(_) => {}
