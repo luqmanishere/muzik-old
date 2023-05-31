@@ -77,8 +77,7 @@ impl ReadConfig {
                 println!("{}", project_dir.data_dir().display());
                 project_dir.data_dir().join("cookies.txt")
             } else {
-                PathBuf::from(std::env::var("HOME").unwrap())
-                    .join(".local/share/muzik/cookies.txt")
+                PathBuf::from(std::env::var("HOME").unwrap()).join(".local/share/muzik/cookies.txt")
             }
         };
         Ok(Config {

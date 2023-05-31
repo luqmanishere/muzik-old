@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     } else {
         // When launched without a subcommand
         //MuzikGui::run(Settings::default())?;
-	info!("ran without a subcommand");
+        info!("ran without a subcommand");
     };
 
     // Return gracefully
