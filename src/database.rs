@@ -148,6 +148,7 @@ INSERT INTO songs (
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub enum PlaylistStatus {
     Download,
     NoDownload,
@@ -290,11 +291,7 @@ impl Song {
     }
 
     pub fn get_yt_id(&self) -> Option<String> {
-        if let Some(yt_id) = &self.yt_id {
-            Some(yt_id.clone())
-        } else {
-            None
-        }
+        self.yt_id.as_ref().cloned()
     }
 
     pub fn get_title_string(&self) -> String {

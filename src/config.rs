@@ -73,14 +73,12 @@ impl ReadConfig {
         let cookies = {
             if let Some(cookies_path) = conf.cookies {
                 cookies_path
+            } else if let Some(project_dir) = ProjectDirs::from("", "", "muzik") {
+                println!("{}", project_dir.data_dir().display());
+                project_dir.data_dir().join("cookies.txt")
             } else {
-                if let Some(project_dir) = ProjectDirs::from("", "", "muzik") {
-                    println!("{}", project_dir.data_dir().display());
-                    project_dir.data_dir().join("cookies.txt")
-                } else {
-                    PathBuf::from(std::env::var("HOME").unwrap())
-                        .join(".local/share/muzik/cookies.txt")
-                }
+                PathBuf::from(std::env::var("HOME").unwrap())
+                    .join(".local/share/muzik/cookies.txt")
             }
         };
         Ok(Config {
