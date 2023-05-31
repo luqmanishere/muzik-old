@@ -7,18 +7,19 @@ use cursive_tabs::TabPanel;
 use eyre::Result;
 use tracing::error;
 
-use crate::config::Config;
+use crate::config::ReadConfig;
 
 use self::event_runner::Event;
 
 mod download;
 mod editor;
 mod event_runner;
+mod metadata;
 
 pub fn run_tui() -> Result<()> {
     let mut siv = Cursive::new();
     // TODO: only use 1 config
-    let conf = Config::default();
+    let conf = ReadConfig::read_config(None)?;
     let mut ev_man = event_runner::EventRunner::new(siv.cb_sink().clone(), conf);
     let tx = ev_man.get_tx();
     std::thread::spawn(move || loop {
@@ -44,6 +45,7 @@ pub fn run_tui() -> Result<()> {
     let delete_tx = tx.clone();
     let verify_tx = tx.clone();
     let missing_tx = tx.clone();
+    let sync_tx = tx.clone();
 
     let mut tab_panel = TabPanel::new();
     tab_panel.set_bar_alignment(cursive_tabs::Align::Center);
@@ -61,6 +63,7 @@ pub fn run_tui() -> Result<()> {
                     .send(Event::DownloadAllMissingFromDatabase)
                     .unwrap()
             })
+            .on_event('S', move |_| sync_tx.send(Event::SyncWithYoutube).unwrap())
             .with_name("Editor"),
     );
     tab_panel.add_tab(download::draw_download_tab(&mut siv, tx).with_name("Download"));

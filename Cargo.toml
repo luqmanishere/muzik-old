@@ -24,3 +24,5 @@ cursive-tabs = "^0"
 send_wrapper = "0.6.0"
 tempfile = "3"
 tracing-appender = "0.2"
+toml = "0.7"
+serde = { version = "1", features = ["derive"]}

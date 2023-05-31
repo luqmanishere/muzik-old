@@ -58,7 +58,7 @@ pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
         .child(hlayout)
         .child(
             TextView::new(
-                "d - Delete | u - Update list | V - verify all | R - download all missing",
+                "d - Delete | u - Update list | V - verify all | R - download all missing | S - yt sync",
             )
             .h_align(cursive::align::HAlign::Center),
         )

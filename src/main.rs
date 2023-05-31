@@ -13,6 +13,7 @@ mod config;
 mod database;
 mod tags;
 mod tui;
+mod util;
 
 use crate::{config::Config, database::Song};
 
@@ -52,14 +53,16 @@ async fn main() -> Result<()> {
             Commands::List => list_command().await.unwrap(),
             Commands::Delete => delete_command().await.unwrap(),
             Commands::Tui => {
-                let tempdir = tempfile::tempdir()?;
-                let mut _guards = start_tui_log(tempdir.path().to_path_buf());
+                // let tempdir = tempfile::tempdir()?;
+                // let mut _guards = start_tui_log(tempdir.path().to_path_buf());
+                let mut _guards = start_tui_log(PathBuf::from("/tmp"));
                 tui_command().await.unwrap()
             }
         }
     } else {
         // When launched without a subcommand
         //MuzikGui::run(Settings::default())?;
+	info!("ran without a subcommand");
     };
 
     // Return gracefully
@@ -169,17 +172,15 @@ async fn download_command(query: Vec<String>) -> Result<()> {
                         println!("File not found after downloading");
                     }
 
-                    let song = Song::new(
-                        config.get_music_dir(),
-                        None,
-                        Some(filename.display().to_string()),
-                        Some(title),
-                        Some(album),
-                        Some(artist),
-                        Some(video.genre.unwrap_or_else(|| "Unknown".to_string())),
-                        Some(id),
-                        video.thumbnail,
-                    );
+                    let song = Song::new()
+                        .music_dir(Some(config.get_music_dir()))
+                        .fname(Some(filename.display().to_string()))
+                        .title(Some(title))
+                        .albums(Some(album))
+                        .artists(Some(artist))
+                        .genre(Some(video.genre.unwrap_or_else(|| "Unknown".to_string())))
+                        .yt_id(Some(id))
+                        .tb_url(video.thumbnail);
 
                     match tags::write_tags_async(filename.clone(), &song).await {
                         Ok(_) => {

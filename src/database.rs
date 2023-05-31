@@ -23,7 +23,8 @@ impl Database {
                 artist  TEXT,
                 yt_id   TEXT,
                 tb_url  TEXT,
-                genre   TEXT
+                genre   TEXT,
+                yt_playlist_id TEXT
 )",
             (),
         )?;
@@ -33,22 +34,22 @@ impl Database {
     pub fn get_all(&self, music_dir: PathBuf) -> Result<Vec<Song>> {
         let mut stmt = self.conn.prepare(
             "
-SELECT id,path,title,album,artist,genre,yt_id,tb_url FROM songs
+SELECT id,path,title,album,artist,genre,yt_id,tb_url,yt_playlist_id FROM songs
 ",
         )?;
 
         let s_iter = stmt.query_map([], |row| {
-            Ok(Song::new(
-                music_dir.clone(),
-                row.get(0).ok(),
-                row.get(1).ok(),
-                row.get(2).ok(),
-                row.get(3).ok(),
-                row.get(4).ok(),
-                row.get(5).ok(),
-                row.get(6).ok(),
-                row.get(7).ok(),
-            ))
+            Ok(Song::new()
+                .music_dir(Some(music_dir.clone()))
+                .id(row.get(0).ok())
+                .fname(row.get(1).ok())
+                .title(row.get(2).ok())
+                .albums(row.get(3).ok())
+                .artists(row.get(4).ok())
+                .genre(row.get(5).ok())
+                .yt_id(row.get(6).ok())
+                .tb_url(row.get(7).ok())
+                .yt_playlist_id(row.get(8).ok()))
         })?;
         let s_vec = s_iter.map(|s| s.unwrap()).collect::<Vec<Song>>();
         Ok(s_vec)
@@ -68,8 +69,9 @@ INSERT INTO songs (
                 artist,
                 genre,
                 yt_id,
-                tb_url
-) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                tb_url,
+                yt_playlist_id
+) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
 ";
                 let fname = if let Some(path) = &song.path {
                     path.file_name().unwrap().to_str().unwrap().to_string()
@@ -85,7 +87,10 @@ INSERT INTO songs (
                         song.get_artists_string(),
                         song.get_genre_string(),
                         song.yt_id.clone().unwrap_or_else(|| "None".to_string()),
-                        song.tb_url.clone().unwrap_or_else(|| "None".to_string())
+                        song.tb_url.clone().unwrap_or_else(|| "None".to_string()),
+                        song.yt_playlist
+                            .clone()
+                            .unwrap_or_else(|| "None".to_string())
                     ],
                 )?;
             }
@@ -103,7 +108,8 @@ INSERT INTO songs (
                 artist = ?5,
                 genre = ?6,
                 yt_id = ?7,
-                tb_url = ?8
+                tb_url = ?8,
+                yt_playlist_id = ?9
             WHERE id = ?1
         ";
         self.conn.execute(
@@ -120,7 +126,8 @@ INSERT INTO songs (
                 song.get_artists_string(),
                 song.get_genre_string(),
                 song.yt_id,
-                song.tb_url
+                song.tb_url,
+                song.yt_playlist
             ],
         )?;
         Ok(())
@@ -141,9 +148,14 @@ INSERT INTO songs (
 }
 
 #[derive(Clone)]
+pub enum PlaylistStatus {
+    Download,
+    NoDownload,
+}
+
+#[derive(Clone)]
 pub struct Song {
     pub id: Option<usize>,
-    /// Full path to file
     pub music_dir: Option<PathBuf>,
     pub path: Option<PathBuf>,
     pub title: Option<String>,
@@ -153,57 +165,89 @@ pub struct Song {
     pub yt_id: Option<String>,
     pub tb_url: Option<String>,
     pub npath: Option<PathBuf>,
+    // youtube playlist
+    pub yt_playlist: Option<String>,
 }
 
 impl Song {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        music_dir: PathBuf,
-        id: Option<usize>,
-        fname: Option<String>,
-        title: Option<String>,
-        album: Option<String>,
-        artist: Option<String>,
-        genre: Option<String>,
-        yt_id: Option<String>,
-        tb_url: Option<String>,
-    ) -> Self {
-        let path = fname.map(|fname| music_dir.join(fname));
-        let music_dir = Some(music_dir);
+    /// Create a new instance of `Song`
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-        let album = album.map(|album| {
-            album
-                .split(';')
-                .map(|s| s.trim().to_string())
-                .collect::<Vec<_>>()
-        });
+    pub fn id(mut self, id: Option<usize>) -> Self {
+        self.id = id;
+        self
+    }
 
-        let artist = artist.map(|artist| {
-            artist
-                .split(';')
-                .map(|s| s.trim().to_string())
-                .collect::<Vec<_>>()
-        });
+    pub fn fname(mut self, fname: Option<String>) -> Self {
+        assert!(self.music_dir.is_some());
+        let music_dir = self.music_dir.clone().unwrap();
+        let path = music_dir.join(fname.unwrap());
+        self.path = Some(path);
+        self
+    }
 
-        let genre = genre.map(|genre| {
-            genre
-                .split(';')
-                .map(|s| s.trim().to_string())
-                .collect::<Vec<_>>()
-        });
+    pub fn music_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.music_dir = dir;
+        self
+    }
 
-        Self {
-            id,
-            path,
-            music_dir,
-            title,
-            album,
-            artist,
-            genre,
-            yt_id,
-            tb_url,
-            npath: None,
-        }
+    pub fn title(mut self, title: Option<String>) -> Self {
+        self.title = title;
+        self
+    }
+
+    pub fn artists(mut self, artists: Option<String>) -> Self {
+        let artists = artists.unwrap_or("Unknown".to_string());
+        let artists_vec = artists
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        self.artist = Some(artists_vec);
+        self.compute_filename();
+        self
+    }
+
+    pub fn albums(mut self, albums: Option<String>) -> Self {
+        let albums = albums.unwrap_or("Unknown".to_string());
+        let albums_vec = albums
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        // here lies a dreadful mistake caused by copy-paste
+        // self.artist = Some(albums_vec);
+        self.album = Some(albums_vec);
+        self.compute_filename();
+        self
+    }
+
+    pub fn genre(mut self, genre: Option<String>) -> Self {
+        let genre = genre.unwrap_or("Unknown".to_string());
+        let genre_vec = genre
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        self.genre = Some(genre_vec);
+        self
+    }
+
+    pub fn yt_id(mut self, yt_id: Option<String>) -> Self {
+        self.yt_id = yt_id;
+        self
+    }
+
+    pub fn tb_url(mut self, tb_url: Option<String>) -> Self {
+        self.tb_url = tb_url;
+        self
+    }
+
+    pub fn yt_playlist_id(mut self, yt_playlist_id: Option<String>) -> Self {
+        self.yt_playlist = yt_playlist_id;
+        self
     }
 
     pub fn set_title(&mut self, title: Option<String>) {
@@ -245,13 +289,11 @@ impl Song {
         self.music_dir.clone().unwrap_or_default()
     }
 
-    pub fn get_yt_id(&self) -> String {
-        // note: we should fail if there is no ID
-        // FIXME: fail when no id is here
+    pub fn get_yt_id(&self) -> Option<String> {
         if let Some(yt_id) = &self.yt_id {
-            yt_id.clone()
+            Some(yt_id.clone())
         } else {
-            "Unknonw".to_string()
+            None
         }
     }
 
@@ -336,6 +378,7 @@ impl Default for Song {
             yt_id: None,
             tb_url: None,
             npath: None,
+            yt_playlist: None,
         }
     }
 }

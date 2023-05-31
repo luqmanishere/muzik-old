@@ -92,6 +92,15 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                 tag.insert_unchecked(tag_item);
             }
 
+            if let Some(id) = &song.id {
+                tag.remove_key(&ItemKey::Unknown("ID".to_string()));
+                let tag_item = TagItem::new(
+                    ItemKey::Unknown("ID".to_string()),
+                    ItemValue::Text(id.to_string()),
+                );
+                tag.insert_unchecked(tag_item);
+            }
+
             if let Some(picture_url) = &song.tb_url {
                 tag.remove_picture_type(lofty::PictureType::CoverFront);
                 if picture_url.contains("http") {
