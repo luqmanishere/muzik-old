@@ -38,11 +38,11 @@
           pkgs.yt-dlp
           pkgs.ffmpeg_5-full
           pkgs.sqlite
+          pkgs.opusTools
         ];
       in {
         # declare projects
         # relPath is the relative path of a project to the flake root
-        # TODO: change this to your crate's path
         nci.projects.${crateName}.relPath = "";
         # configure crates
         nci.crates.${crateName} = {
@@ -94,6 +94,9 @@
             just
             pkg-config
             clippy
+            jq
+            yt-dlp
+            opusTools
           ];
 
           commands = [
