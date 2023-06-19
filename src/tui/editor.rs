@@ -1,5 +1,4 @@
 use crossbeam_channel::Sender;
-
 use cursive::{
     event::{Callback, EventResult, Key},
     view::{Nameable, Resizable, Scrollable},
@@ -77,7 +76,7 @@ fn song_selector_view(tx: Sender<Event>) -> impl cursive::View {
         .full_width()
         .full_height();
     let select_song = Panel::new(select_song).title("Songs");
-    
+
     FocusTracker::new(select_song).on_focus(|_view| {
         EventResult::Consumed(Some(Callback::from_fn_mut(|siv: &mut Cursive| {
             siv.call_on_name("help", |view: &mut TextView| 
@@ -198,10 +197,7 @@ fn on_artist_show_event(s: &mut Cursive) {
     let dia = Dialog::around(
         LinearLayout::vertical()
             .child(TextView::new(format!("id: {}", selection.id)))
-            .child(TextView::new(format!(
-                "name: {}",
-                selection.name
-            ))),
+            .child(TextView::new(format!("name: {}", selection.name))),
     )
     .title("Artist Info")
     .dismiss_button("Dismiss");
@@ -300,10 +296,7 @@ fn on_album_show_command(s: &mut Cursive) {
     let dia = Dialog::around(
         LinearLayout::vertical()
             .child(TextView::new(format!("id: {}", selection.id)))
-            .child(TextView::new(format!(
-                "name: {}",
-                selection.name
-            ))),
+            .child(TextView::new(format!("name: {}", selection.name))),
     )
     .title("Album Info")
     .dismiss_button("Dismiss");
