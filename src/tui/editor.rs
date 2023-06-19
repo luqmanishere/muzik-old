@@ -23,7 +23,7 @@ pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
     let select_song = song_selector_view(tx.clone());
 
     // Metadata SelectView entries are dynamically updated
-    let select_metadata = metadata_selector_view(tx.clone());
+    let select_metadata = metadata_selector_view(tx);
 
     let hlayout = LinearLayout::horizontal()
         .child(select_song)
@@ -60,7 +60,7 @@ fn song_selector_view(tx: Sender<Event>) -> impl cursive::View {
     tx.send(Event::UpdateEditorSongSelectView).unwrap();
 
     let ttx1 = tx.clone();
-    let ttx2 = tx.clone();
+    let ttx2 = tx;
     let select_song = select_song
         .on_submit(move |_, index| {
             ttx1.send(Event::UpdateEditorMetadataSelectView(*index))
@@ -77,20 +77,20 @@ fn song_selector_view(tx: Sender<Event>) -> impl cursive::View {
         .full_width()
         .full_height();
     let select_song = Panel::new(select_song).title("Songs");
-    let select_song = FocusTracker::new(select_song).on_focus(|_view| {
+    
+    FocusTracker::new(select_song).on_focus(|_view| {
         EventResult::Consumed(Some(Callback::from_fn_mut(|siv: &mut Cursive| {
             siv.call_on_name("help", |view: &mut TextView| 
                 view.set_content("d - Delete | u - Update list | V - verify all | R - download all missing | S - yt sync" ));
         })))
-    });
-    select_song
+    })
 }
 
 fn metadata_selector_view(tx: Sender<Event>) -> impl cursive::View {
     let artist_add_tx = tx.clone();
     let artist_edit_tx = tx.clone();
     let album_edit_tx = tx.clone();
-    let album_add_tx = tx.clone();
+    let album_add_tx = tx;
     let title = TextView::new("Unknown").with_name("metadata_title");
 
     let artist_select = OnEventView::new(
@@ -197,10 +197,10 @@ fn on_artist_show_event(s: &mut Cursive) {
         .unwrap();
     let dia = Dialog::around(
         LinearLayout::vertical()
-            .child(TextView::new(format!("id: {}", selection.id.to_string())))
+            .child(TextView::new(format!("id: {}", selection.id)))
             .child(TextView::new(format!(
                 "name: {}",
-                selection.name.to_string()
+                selection.name
             ))),
     )
     .title("Artist Info")
@@ -299,10 +299,10 @@ fn on_album_show_command(s: &mut Cursive) {
         .unwrap();
     let dia = Dialog::around(
         LinearLayout::vertical()
-            .child(TextView::new(format!("id: {}", selection.id.to_string())))
+            .child(TextView::new(format!("id: {}", selection.id)))
             .child(TextView::new(format!(
                 "name: {}",
-                selection.name.to_string()
+                selection.name
             ))),
     )
     .title("Album Info")

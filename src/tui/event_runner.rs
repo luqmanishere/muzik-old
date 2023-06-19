@@ -634,7 +634,6 @@ impl EventRunner {
             .clone()
             .expect("current_selected_song is not empty")
             .id
-            .clone()
             .expect("id is not empty");
 
         let _song_artist = self
@@ -663,7 +662,6 @@ impl EventRunner {
                 .clone()
                 .expect("current_selected_song is not empty")
                 .id
-                .clone()
                 .expect("id is not empty");
             let _song_artist = self
                 .config
@@ -694,7 +692,6 @@ impl EventRunner {
                 .clone()
                 .expect("current_selected_song is not empty")
                 .id
-                .clone()
                 .expect("id is not empty");
             let _song_album = self
                 .config
@@ -717,7 +714,6 @@ impl EventRunner {
             .clone()
             .expect("current_selected_song is not empty")
             .id
-            .clone()
             .expect("id is not empty");
 
         let _song_album = self

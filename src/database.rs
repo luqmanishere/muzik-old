@@ -581,7 +581,7 @@ impl DbConnection {
         thumbnail_url: Option<String>,
     ) -> Result<i32> {
         let model = song::ActiveModel {
-            id: ActiveValue::Set(song_id as i32),
+            id: ActiveValue::Set(song_id),
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
             thumbnail_url: ActiveValue::Set(thumbnail_url),
@@ -592,7 +592,7 @@ impl DbConnection {
 
     pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<()> {
         self.update_song(
-            song.id.unwrap() as i32,
+            song.id.unwrap(),
             song.get_title_string(),
             song.yt_id.clone(),
             song.tb_url.clone(),
@@ -617,7 +617,7 @@ impl DbConnection {
                 .filter(song_genre_junction::Column::SongId.eq(song_id))
                 .exec(&self.db)
                 .await?;
-            Ok(Song::delete_by_id(song_id as i32)
+            Ok(Song::delete_by_id(song_id)
                 .exec(&self.db)
                 .await?
                 .rows_affected)

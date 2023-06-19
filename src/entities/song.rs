@@ -13,6 +13,7 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+#[allow(clippy::enum_variant_names)]
 pub enum Relation {
     #[sea_orm(has_many = "super::song_album_junction::Entity")]
     SongAlbumJunction,
