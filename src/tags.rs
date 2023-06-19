@@ -4,13 +4,13 @@ use eyre::{eyre, Result};
 use lofty::{ItemKey, ItemValue, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
 use tracing::error;
 
-use crate::database::Song;
+use crate::database::AppSong;
 
-pub async fn write_tags_async(path: PathBuf, song: &Song) -> Result<()> {
-    write_tags(path, song)
+pub async fn write_tags_async(path: PathBuf, song: &AppSong) -> Result<()> {
+    write_tags(path, song).await
 }
 
-pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
+pub async fn write_tags(path: PathBuf, song: &AppSong) -> Result<()> {
     match Probe::open(path.clone())?.read() {
         Ok(mut tagged_file) => {
             let tag = match tagged_file.primary_tag_mut() {
@@ -47,7 +47,7 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     let tag_item = TagItem::new_checked(
                         tag.tag_type(),
                         ItemKey::TrackArtist,
-                        lofty::ItemValue::Text(artist.to_string()),
+                        lofty::ItemValue::Text(artist.name.clone()),
                     )
                     .unwrap();
 
@@ -61,7 +61,7 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     let tag_item = TagItem::new_checked(
                         tag.tag_type(),
                         ItemKey::AlbumTitle,
-                        lofty::ItemValue::Text(album.to_string()),
+                        lofty::ItemValue::Text(album.name.clone()),
                     )
                     .unwrap();
 
@@ -75,7 +75,7 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
                     let tag_item = TagItem::new_checked(
                         tag.tag_type(),
                         ItemKey::Genre,
-                        ItemValue::Text(it.to_string()),
+                        ItemValue::Text(it.genre.clone()),
                     )
                     .unwrap();
 
@@ -104,11 +104,11 @@ pub fn write_tags(path: PathBuf, song: &Song) -> Result<()> {
             if let Some(picture_url) = &song.tb_url {
                 tag.remove_picture_type(lofty::PictureType::CoverFront);
                 if picture_url.contains("http") {
-                    let picture = reqwest::blocking::get(picture_url);
-                    match picture {
+                    let picture = reqwest::get(picture_url);
+                    match picture.await {
                         Ok(request) => {
                             let mut pict: Vec<u8> = vec![];
-                            let pic = image::load_from_memory(&request.bytes()?)?;
+                            let pic = image::load_from_memory(&request.bytes().await?)?;
                             pic.write_to(&mut Cursor::new(&mut pict), image::ImageFormat::Png)?;
 
                             let lofty_pic = Picture::new_unchecked(

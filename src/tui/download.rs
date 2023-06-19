@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use crossbeam_channel::Sender;
 
 use cursive::{
     view::{Nameable, Resizable, Scrollable},
@@ -92,7 +92,6 @@ pub fn draw_metadata_editor(siv: &mut Cursive, song: SingleVideo, tx: Sender<Eve
             //
             let video = song.clone();
             let id = id.clone();
-            // TODO: get genre
             let genre = song.genre.clone().unwrap_or_else(|| "Unknown".to_string());
             let title = siv.call_on_name("title_input", |v: &mut EditView| {
                 v.get_content().to_string()

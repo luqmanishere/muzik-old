@@ -1,50 +1,29 @@
-use std::sync::mpsc::Sender;
+use crossbeam_channel::Sender;
 
 use cursive::{
+    event::{Callback, EventResult, Key},
     view::{Nameable, Resizable, Scrollable},
-    views::{Dialog, EditView, LinearLayout, Panel, SelectView, TextView},
+    views::{
+        Dialog, DummyView, EditView, FocusTracker, LinearLayout, OnEventView, Panel, SelectView,
+        TextView,
+    },
     Cursive,
 };
+use tracing::debug;
 
-use crate::database::Song;
+use crate::{
+    database::AppSong,
+    entities::{album, artist, genre},
+};
 
 use super::event_runner::Event;
 
 pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
     // Default before data is loaded in
-    let list = vec![Song::default()];
-    let select_song_list = list.iter().enumerate().map(|(ind, f)| {
-        (
-            format!("{} - {}", f.get_title_string(), f.get_artists_string()),
-            ind,
-        )
-    });
-    let mut select_song = SelectView::new();
-    select_song.add_all(select_song_list.into_iter());
-    tx.send(Event::UpdateEditorSongSelectView).unwrap();
-
-    let ttx = tx.clone();
-    let select_song = select_song.on_submit(move |_, index| {
-        ttx.send(Event::UpdateEditorMetadataSelectView(*index))
-            .unwrap();
-    });
-    let select_song = select_song
-        .with_name("select_song")
-        .scrollable()
-        .min_width(20)
-        .full_width()
-        .full_height();
-    let select_song = Panel::new(select_song).title("Songs");
+    let select_song = song_selector_view(tx.clone());
 
     // Metadata SelectView entries are dynamically updated
-    let mut select_metadata = SelectView::new().item("Empty".to_string(), "Empty".to_string());
-    let ttx = tx;
-    select_metadata.set_on_submit(move |_siv: &mut Cursive, _item: &String| {
-        ttx.send(Event::OnMetadataSelect).unwrap();
-    });
-    let select_metadata = select_metadata.with_name("select_metadata");
-    let select_metadata = select_metadata.scrollable().min_width(20);
-    let select_metadata = Panel::new(select_metadata).title("Metadata").full_width();
+    let select_metadata = metadata_selector_view(tx.clone());
 
     let hlayout = LinearLayout::horizontal()
         .child(select_song)
@@ -57,10 +36,9 @@ pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
         .child(TextView::new("Database Editor").h_align(cursive::align::HAlign::Center))
         .child(hlayout)
         .child(
-            TextView::new(
-                "d - Delete | u - Update list | V - verify all | R - download all missing | S - yt sync",
-            )
-            .h_align(cursive::align::HAlign::Center),
+            TextView::new("d - Delete | u - Update list | V - verify all | R - download all missing | S - yt sync")
+                .h_align(cursive::align::HAlign::Center)
+                .with_name("help"),
         )
         .child(
             Panel::new(TextView::new("Standby").with_name("statusbar"))
@@ -69,59 +47,343 @@ pub fn draw_database_editor(tx: Sender<Event>) -> LinearLayout {
         )
 }
 
-pub fn editor_layer(_siv: &mut Cursive, song: Song, tx: Sender<Event>) -> Dialog {
-    let left_layout = LinearLayout::vertical()
-        .child(TextView::new("Title:"))
-        .child(TextView::new("Artist"))
-        .child(TextView::new("Album"));
-
-    let right_layout = LinearLayout::vertical()
-        .child(
-            EditView::new()
-                .content(song.title.as_ref().unwrap().clone())
-                .with_name("editor_title")
-                .min_width(30),
+fn song_selector_view(tx: Sender<Event>) -> impl cursive::View {
+    let list = vec![AppSong::default()];
+    let select_song_list = list.iter().enumerate().map(|(ind, f)| {
+        (
+            format!("{} - {}", f.get_title_string(), f.get_artists_string()),
+            ind,
         )
-        .child(
-            EditView::new()
-                .content(song.get_artists_string())
-                .with_name("editor_artist")
-                .min_width(30),
-        )
-        .child(
-            EditView::new()
-                .content(song.get_albums_string())
-                .with_name("editor_album")
-                .min_width(30),
-        );
+    });
+    let mut select_song = SelectView::new();
+    select_song.add_all(select_song_list.into_iter());
+    tx.send(Event::UpdateEditorSongSelectView).unwrap();
 
-    Dialog::around(
-        LinearLayout::horizontal()
-            .child(left_layout)
-            .child(right_layout),
+    let ttx1 = tx.clone();
+    let ttx2 = tx.clone();
+    let select_song = select_song
+        .on_submit(move |_, index| {
+            ttx1.send(Event::UpdateEditorMetadataSelectView(*index))
+                .unwrap();
+        })
+        .on_select(move |_, index| {
+            ttx2.send(Event::UpdateEditorMetadataSelectView(*index))
+                .unwrap()
+        });
+    let select_song = select_song
+        .with_name("select_song")
+        .scrollable()
+        .min_width(20)
+        .full_width()
+        .full_height();
+    let select_song = Panel::new(select_song).title("Songs");
+    let select_song = FocusTracker::new(select_song).on_focus(|_view| {
+        EventResult::Consumed(Some(Callback::from_fn_mut(|siv: &mut Cursive| {
+            siv.call_on_name("help", |view: &mut TextView| 
+                view.set_content("d - Delete | u - Update list | V - verify all | R - download all missing | S - yt sync" ));
+        })))
+    });
+    select_song
+}
+
+fn metadata_selector_view(tx: Sender<Event>) -> impl cursive::View {
+    let artist_add_tx = tx.clone();
+    let artist_edit_tx = tx.clone();
+    let album_edit_tx = tx.clone();
+    let album_add_tx = tx.clone();
+    let title = TextView::new("Unknown").with_name("metadata_title");
+
+    let artist_select = OnEventView::new(
+        FocusTracker::new(
+            SelectView::new()
+                .item("Empty".to_string(), artist::Model::default())
+                .with_name("metadata_artist_select_view"),
+        )
+        .on_focus(|_| {
+            EventResult::Consumed(Some(Callback::from_fn_mut(|siv: &mut Cursive| {
+                siv.call_on_name("help", |view: &mut TextView| {
+                    view.set_content("a - add artist | e - edit artist | Enter - view info")
+                });
+            })))
+        }),
     )
-    .dismiss_button("Cancel")
-    .button("Ok", move |siv: &mut Cursive| {
-        let mut song = song.clone();
-        let title = siv
-            .call_on_name("editor_title", |view: &mut EditView| view.get_content())
-            .unwrap()
-            .to_string();
-        let artist = siv
-            .call_on_name("editor_artist", |view: &mut EditView| view.get_content())
-            .unwrap()
-            .to_string();
-        let album = siv
-            .call_on_name("editor_album", |view: &mut EditView| view.get_content())
-            .unwrap()
-            .to_string();
-
-        song.set_title(Some(title));
-        song.set_artists(artist);
-        song.set_albums(album);
-        // TODO: actually set genre
-        song.set_genre(String::from("Unknown"));
-        tx.send(Event::UpdateSongDatabase(song)).unwrap();
-        siv.pop_layer();
+    .on_event(Key::Enter, |s| {
+        on_artist_show_event(s);
     })
+    // add artist event
+    .on_event('a', move |s| {
+        on_artist_add_command(s, artist_add_tx.clone());
+    })
+    // edit artist event
+    .on_event('e', move |s| {
+        on_artist_edit_command(s, artist_edit_tx.clone());
+    });
+    // TODO: delete entry
+
+    let album_select = OnEventView::new(
+        FocusTracker::new(
+            SelectView::new()
+                .item(
+                    "Empty".to_string(),
+                    album::Model {
+                        id: 0,
+                        name: "Empty".to_string(),
+                    },
+                )
+                .with_name("metadata_album_select_view"),
+        )
+        .on_focus(|_| {
+            EventResult::Consumed(Some(Callback::from_fn_mut(|siv: &mut Cursive| {
+                siv.call_on_name("help", |view: &mut TextView| {
+                    view.set_content("a - add album | e - edit album | Enter - view info")
+                });
+            })))
+        }),
+    )
+    .on_event(Key::Enter, |s| {
+        on_album_show_command(s);
+    })
+    .on_event('e', move |s| {
+        on_album_edit_command(s, album_edit_tx.clone());
+    })
+    .on_event('a', move |s| {
+        on_album_add_command(s, album_add_tx.clone());
+    });
+
+    let genre_select = SelectView::new()
+        .item(
+            "Empty".to_string(),
+            genre::Model {
+                id: 0,
+                genre: "Empty".to_string(),
+            },
+        )
+        .with_name("metadata_genre_select_view");
+
+    // layouts
+    let artist_layout = LinearLayout::vertical()
+        .child(artist_select)
+        .with_name("metadata_artist_layout")
+        .full_width();
+    let album_layout = LinearLayout::vertical()
+        .child(album_select)
+        .with_name("metadata_album_layout")
+        .full_width();
+
+    Panel::new(
+        LinearLayout::vertical()
+            .child(DummyView.full_width().full_height())
+            .child(Panel::new(title).title("Title"))
+            .child(
+                LinearLayout::horizontal()
+                    .child(Panel::new(artist_layout).title("Artists"))
+                    .child(Panel::new(album_layout).title("Albums"))
+                    .full_width(),
+            )
+            .child(Panel::new(genre_select).title("Genres"))
+            .child(DummyView.full_width().full_height()),
+    )
+    .title("Metadata")
+    .full_width()
+}
+
+fn on_artist_show_event(s: &mut Cursive) {
+    let selection = s
+        .call_on_name(
+            "metadata_artist_select_view",
+            |view: &mut SelectView<artist::Model>| view.selection(),
+        )
+        .unwrap()
+        .unwrap();
+    let dia = Dialog::around(
+        LinearLayout::vertical()
+            .child(TextView::new(format!("id: {}", selection.id.to_string())))
+            .child(TextView::new(format!(
+                "name: {}",
+                selection.name.to_string()
+            ))),
+    )
+    .title("Artist Info")
+    .dismiss_button("Dismiss");
+    s.add_layer(dia);
+}
+
+fn on_artist_add_command(s: &mut Cursive, tx: Sender<Event>) {
+    let dialog = Dialog::around(
+        LinearLayout::vertical().child(
+            LinearLayout::horizontal()
+                .child(TextView::new("new artist name: "))
+                .child(
+                    EditView::new()
+                        .with_name("artist_name_edit_view")
+                        .min_width(10),
+                ),
+        ), // TODO: implement some kind of autocompletion
+    )
+    .dismiss_button("Dismiss")
+    .button("Ok", move |s| {
+        let new = s
+            .call_on_name("artist_name_edit_view", |view: &mut EditView| {
+                view.get_content()
+            })
+            .unwrap();
+
+        debug!("new: {}", new);
+        tx.send(Event::MetadataEditorAddArtist(new.to_string()))
+            .unwrap();
+        s.pop_layer();
+    })
+    .title("Edit Artist");
+    s.add_layer(dialog);
+}
+
+fn on_artist_edit_command(s: &mut Cursive, tx: Sender<Event>) {
+    let selection = s
+        .call_on_name(
+            "metadata_artist_select_view",
+            |view: &mut SelectView<artist::Model>| view.selection().unwrap(),
+        )
+        .unwrap();
+    let dialog = Dialog::around(
+        LinearLayout::vertical()
+            .child(TextView::new(format!(
+                "old artist name: {}",
+                selection.name
+            )))
+            .child(
+                LinearLayout::horizontal()
+                    .child(TextView::new("new artist name: "))
+                    .child(
+                        EditView::new()
+                            .with_name("artist_name_edit_view")
+                            .min_width(10),
+                    ),
+            ), // TODO: implement some kind of autocompletion
+    )
+    .dismiss_button("Dismiss")
+    .button("Ok", move |s| {
+        let selection = s
+            .call_on_name(
+                "metadata_artist_select_view",
+                |view: &mut SelectView<artist::Model>| view.selection(),
+            )
+            .unwrap()
+            .unwrap();
+        debug!("selection: {}", selection.name);
+
+        let new = s
+            .call_on_name("artist_name_edit_view", |view: &mut EditView| {
+                view.get_content()
+            })
+            .unwrap();
+
+        debug!("new: {}", new);
+        tx.send(Event::MetadataEditorEditArtist((
+            selection.name.to_string(),
+            new.to_string(),
+        )))
+        .unwrap();
+        s.pop_layer();
+    })
+    .title("Edit Artist");
+    s.add_layer(dialog);
+}
+
+fn on_album_show_command(s: &mut Cursive) {
+    let selection = s
+        .call_on_name(
+            "metadata_album_select_view",
+            |view: &mut SelectView<album::Model>| view.selection(),
+        )
+        .unwrap()
+        .unwrap();
+    let dia = Dialog::around(
+        LinearLayout::vertical()
+            .child(TextView::new(format!("id: {}", selection.id.to_string())))
+            .child(TextView::new(format!(
+                "name: {}",
+                selection.name.to_string()
+            ))),
+    )
+    .title("Album Info")
+    .dismiss_button("Dismiss");
+    s.add_layer(dia);
+}
+
+fn on_album_edit_command(s: &mut Cursive, tx: Sender<Event>) {
+    let selection = s
+        .call_on_name(
+            "metadata_album_select_view",
+            |view: &mut SelectView<album::Model>| view.selection().unwrap(),
+        )
+        .unwrap();
+    let dialog = Dialog::around(
+        LinearLayout::vertical()
+            .child(TextView::new(format!("old album name: {}", selection.name)))
+            .child(
+                LinearLayout::horizontal()
+                    .child(TextView::new("new album name: "))
+                    .child(
+                        EditView::new()
+                            .with_name("album_name_edit_view")
+                            .min_width(10),
+                    ),
+            ), // TODO: implement some kind of autocompletion
+    )
+    .dismiss_button("Dismiss")
+    .button("Ok", move |s| {
+        let selection = s
+            .call_on_name(
+                "metadata_album_select_view",
+                |view: &mut SelectView<album::Model>| view.selection(),
+            )
+            .unwrap()
+            .unwrap();
+        debug!("selection: {}", selection.name);
+
+        let new = s
+            .call_on_name("album_name_edit_view", |view: &mut EditView| {
+                view.get_content()
+            })
+            .unwrap();
+
+        debug!("new: {}", new);
+        tx.send(Event::MetadataEditorEditAlbum((
+            selection.name.to_string(),
+            new.to_string(),
+        )))
+        .unwrap();
+        s.pop_layer();
+    })
+    .title("Edit Artist");
+    s.add_layer(dialog);
+}
+
+fn on_album_add_command(s: &mut Cursive, tx: Sender<Event>) {
+    let dialog = Dialog::around(
+        LinearLayout::vertical().child(
+            LinearLayout::horizontal()
+                .child(TextView::new("new album name: "))
+                .child(
+                    EditView::new()
+                        .with_name("album_name_edit_view")
+                        .min_width(10),
+                ),
+        ), // TODO: implement some kind of autocompletion
+    )
+    .dismiss_button("Dismiss")
+    .button("Ok", move |s| {
+        let new = s
+            .call_on_name("album_name_edit_view", |view: &mut EditView| {
+                view.get_content()
+            })
+            .unwrap();
+
+        debug!("new: {}", new);
+        tx.send(Event::MetadataEditorAddAlbum(new.to_string()))
+            .unwrap();
+        s.pop_layer();
+    })
+    .title("Edit Album");
+    s.add_layer(dialog);
 }

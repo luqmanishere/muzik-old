@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use crossbeam_channel::Sender;
 
 use cursive::{
     view::{Nameable, Resizable, Scrollable},

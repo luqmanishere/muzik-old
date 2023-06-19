@@ -6,6 +6,7 @@
     parts.url = "github:hercules-ci/flake-parts";
     parts.inputs.nixpkgs-lib.follows = "nixpkgs";
     devshell.url = "github:numtide/devshell";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
   outputs = inputs @ {
@@ -43,7 +44,14 @@
       in {
         # declare projects
         # relPath is the relative path of a project to the flake root
+        _module.args.pkgs = import nixpkgs {
+          inherit system;
+          overlays = [inputs.rust-overlay.overlays.default];
+        };
         nci.projects.${crateName}.relPath = "";
+        nci.toolchains = {
+          build = inputs.rust-overlay.packages."${system}".rust;
+        };
         # configure crates
         nci.crates.${crateName} = {
           # export crate (packages and devshell) in flake outputs
@@ -76,9 +84,17 @@
         # export the crate devshell as the default devshell
         devshells.default = with pkgs; {
           env = [
+            /*
             {
               name = "RUST_SRC_PATH";
               value = rustPlatform.rustLibSrc;
+            }
+            */
+            {
+              name = "RUST_SRC_PATH";
+              value = "${pkgs.rust-bin.stable.latest.default.override {
+                extensions = ["rust-src"];
+              }}/lib/rustlib/src/rust/library";
             }
             {
               name = "PKG_CONFIG_PATH";
@@ -87,13 +103,14 @@
           ];
 
           packages = [
-            cargo
+            (rust-bin.stable.latest.default.override {
+              extensions = ["rust-src"];
+            })
+            cargo-watch
             rust-analyzer
-            rustc
-            rustfmt
+            sea-orm-cli
             just
             pkg-config
-            clippy
             jq
             yt-dlp
             opusTools
@@ -105,6 +122,20 @@
               command = "RUST_LOG=debug nix run . -- tui";
               help = "Run the muzik tui";
               category = "Run";
+            }
+
+            {
+              name = "run-dbtest";
+              command = "RUST_LOG=debug nix run . -- db-test";
+              help = "Run the dbtest";
+              category = "Run";
+            }
+
+            {
+              name = "build-muzik";
+              command = "nix build .";
+              help = "build muzik";
+              category = "Build";
             }
           ];
         };

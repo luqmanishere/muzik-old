@@ -4,7 +4,7 @@ use directories::{ProjectDirs, UserDirs};
 use eyre::{eyre, Context, Result};
 use serde::Deserialize;
 
-use crate::database::Database;
+use crate::database::DbConnection;
 
 #[derive(Deserialize)]
 pub struct ReadConfig {
@@ -16,7 +16,7 @@ pub struct ReadConfig {
 
 impl ReadConfig {
     /// Read config from provided path
-    pub fn read_config(path: Option<PathBuf>) -> Result<Config> {
+    pub async fn read_config(path: Option<PathBuf>) -> Result<Config> {
         let config_path = {
             if let Some(path) = path {
                 path
@@ -68,7 +68,7 @@ impl ReadConfig {
             }
         };
 
-        let db = Database::new(music_dir.join("database.sqlite")).unwrap();
+        let db_new = DbConnection::new(music_dir.join("database.sqlite")).await?;
 
         let cookies = {
             if let Some(cookies_path) = conf.cookies {
@@ -82,7 +82,7 @@ impl ReadConfig {
         };
         Ok(Config {
             music_dir,
-            db,
+            db_new,
             cookies: if cookies.exists() {
                 Some(cookies)
             } else {
@@ -95,50 +95,9 @@ impl ReadConfig {
 
 pub struct Config {
     pub music_dir: PathBuf,
-    pub db: Database,
+    pub db_new: DbConnection,
     pub cookies: Option<PathBuf>,
     pub yt_playlist_sync: Option<Vec<String>>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        let music_dir = match UserDirs::new() {
-            Some(user_dirs) => match user_dirs.audio_dir() {
-                Some(audio_dir) => audio_dir.to_path_buf(),
-                None => {
-                    if let Ok(_termux_ver) = std::env::var("TERMUX_VERSION") {
-                        PathBuf::from(std::env::var("HOME").unwrap()).join("storage/music")
-                    } else {
-                        PathBuf::from(std::env::var("HOME").unwrap()).join("Music")
-                    }
-                }
-            },
-            None => {
-                if let Ok(_termux_ver) = std::env::var("TERMUX_VERSION") {
-                    PathBuf::from(std::env::var("HOME").unwrap()).join("storage/music")
-                } else {
-                    PathBuf::from(std::env::var("HOME").unwrap()).join("Music")
-                }
-            }
-        };
-        let db = Database::new(music_dir.join("database.sqlite")).unwrap();
-        let cookies = if let Some(project_dir) = ProjectDirs::from("", "", "muzik") {
-            println!("{}", project_dir.data_dir().display());
-            project_dir.data_dir().join("cookies.txt")
-        } else {
-            PathBuf::from(std::env::var("HOME").unwrap()).join(".local/share/muzik/cookies.txt")
-        };
-        Self {
-            music_dir,
-            db,
-            cookies: if cookies.exists() {
-                Some(cookies)
-            } else {
-                None
-            },
-            yt_playlist_sync: None,
-        }
-    }
 }
 
 impl Config {
