@@ -2,12 +2,23 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type AlbumModel = Model;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "album")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub name: String,
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            name: "Unknown".to_string(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

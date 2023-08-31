@@ -2,6 +2,8 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type ArtistModel = Model;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "artist")]
 pub struct Model {
@@ -14,7 +16,7 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             id: 0,
-            name: "Empty".to_string(),
+            name: "Unknown".to_string(),
         }
     }
 }

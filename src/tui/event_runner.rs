@@ -70,13 +70,9 @@ impl EventRunner {
                                 view.add_all(items);
                             },
                         );
-                        // Notify on finish loading
-                        let text = format!("Done searching for: {}", kw);
-                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                            view.set_content(&text);
-                        });
                     }))
                     .unwrap();
+                self.notify_ui(format!("Done searching for: {}", kw));
             }
             Err(e) => return Err(e.wrap_err("error while searching youtube")),
         }
@@ -97,7 +93,7 @@ impl EventRunner {
         let status_text = format!("Downloading: {}: {}", title, artist);
         self.notify_ui(status_text);
 
-        let filename_format = format!("{} - {}.%(ext)s", title, artist);
+        let filename_format = format!("{} - {} {}.%(ext)s", title, artist, id);
         let filename = format!("{} - {} {}.opus", title, artist, id);
         let filename = song.get_music_dir().join(filename);
         let _youtube = download_from_youtube(

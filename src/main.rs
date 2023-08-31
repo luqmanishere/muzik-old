@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
 use eyre::{eyre, Result};
+use iced::{Application, Settings};
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
@@ -13,6 +14,7 @@ use youtube_dl::{SearchOptions, YoutubeDl};
 mod config;
 mod database;
 mod entities;
+mod gui;
 mod migrator;
 mod tags;
 mod tui;
@@ -37,6 +39,7 @@ enum Commands {
     List,
     Delete,
     Tui,
+    Gui,
     DbTest,
 }
 
@@ -64,6 +67,30 @@ async fn main() -> Result<()> {
                 // let mut _guards = start_tui_log(tempdir.path().to_path_buf());
                 let mut _guards = start_tui_log(PathBuf::from("/tmp"));
                 tui_command().await.unwrap()
+            }
+            Commands::Gui => {
+                // construct a subscriber that prints formatted traces to stdout
+                let subscriber = tracing_subscriber::registry().with(
+                    fmt::layer().with_ansi(true).with_filter(
+                        filter::EnvFilter::builder()
+                            .with_default_directive(filter::LevelFilter::INFO.into())
+                            .from_env_lossy(),
+                    ),
+                );
+                // use that subscriber to process traces emitted after this point
+                tracing::subscriber::set_global_default(subscriber)?;
+                info!("logger started!");
+                // let mut _guards = start_tui_log(PathBuf::from("/tmp"));
+                let config = ReadConfig::read_config(None).await?;
+                gui::GuiMain::run(Settings {
+                    window: iced::window::Settings {
+                        size: (1280, 720),
+                        ..Default::default()
+                    },
+                    flags: config,
+                    ..Default::default()
+                })?
+                // FIXME: cannot drop runtime in context where blocking is not allowed
             }
             Commands::DbTest => {
                 // construct a subscriber that prints formatted traces to stdout

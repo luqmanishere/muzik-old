@@ -7,25 +7,41 @@ edition = "2021"
 
 [dependencies]
 eyre = "0.6"
-youtube_dl = {version = "0.8", default-features = false , features = ["tokio"]}
-tokio = {version = "1", features= ["full"]}
-clap = {version = "4", features = ["derive"]}
-dialoguer = {version = "0.10", features=["fuzzy-select", "completion"]}
+youtube_dl = { version = "0.8", default-features = false, features = ["tokio"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+dialoguer = { version = "0.10", features = ["fuzzy-select", "completion"] }
 sanitize-filename = "0.4"
 tracing = "0.1"
-tracing-subscriber = {version = "0.3", features =["env-filter", "fmt",  "time"]}
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "fmt",
+    "time",
+] }
 image = "0.24"
-reqwest = {version = "0.11" ,features = ["blocking"]}
+reqwest = { version = "0.11", features = ["blocking"] }
 directories = "5"
-lofty = {version = "0.14"}
-cursive = {version = "0.20", default-features = false, features = ["crossterm-backend", "toml"]}
+lofty = { version = "0.15" }
+cursive = { version = "0.20", default-features = false, features = [
+    "crossterm-backend",
+    "toml",
+] }
 cursive-tabs = "^0"
 send_wrapper = "0.6.0"
 tempfile = "3"
 tracing-appender = "0.2"
 toml = "0.7"
-serde = { version = "1", features = ["derive"]}
-sea-orm = { version = "^0", features = [ "sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }
+serde = { version = "1", features = ["derive"] }
+sea-orm = { version = "^0", features = [
+    "sqlx-sqlite",
+    "runtime-tokio-rustls",
+    "macros",
+] }
 sea-orm-migration = "^0"
 async-trait = "0.1"
 crossbeam-channel = "0.5"
+iced = { version = "0.10", features = ["tokio", "image"] }
+iced_aw = { version = "0.6", features = ["split", "tabs"] }
+iced_native = "0.10"
+walkdir = "2"
+mime_guess = "2"

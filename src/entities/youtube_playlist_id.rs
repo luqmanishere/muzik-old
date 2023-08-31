@@ -2,6 +2,8 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type YoutubePlaylistIdModel = Model;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "youtube_playlist_id")]
 pub struct Model {

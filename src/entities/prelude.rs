@@ -3,7 +3,7 @@
 pub use super::album::Entity as Album;
 pub use super::artist::Entity as Artist;
 pub use super::genre::Entity as Genre;
-pub use super::song::Entity as Song;
+pub use super::song::Entity as SongEntity;
 pub use super::song_album_junction::Entity as SongAlbumJunction;
 pub use super::song_artist_junction::Entity as SongArtistJunction;
 pub use super::song_genre_junction::Entity as SongGenreJunction;

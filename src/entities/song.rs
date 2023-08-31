@@ -10,6 +10,7 @@ pub struct Model {
     pub title: String,
     pub youtube_id: Option<String>,
     pub thumbnail_url: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

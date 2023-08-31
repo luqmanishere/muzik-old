@@ -93,6 +93,7 @@ impl ReadConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct Config {
     pub music_dir: PathBuf,
     pub db_new: DbConnection,
@@ -103,5 +104,16 @@ pub struct Config {
 impl Config {
     pub fn get_music_dir(&self) -> PathBuf {
         self.music_dir.clone()
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            music_dir: Default::default(),
+            db_new: DbConnection::default(),
+            cookies: Default::default(),
+            yt_playlist_sync: Default::default(),
+        }
     }
 }
