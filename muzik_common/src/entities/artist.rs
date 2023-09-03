@@ -2,35 +2,44 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type ArtistModel = Model;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "album")]
+#[sea_orm(table_name = "artist")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub name: String,
 }
 
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            name: "Unknown".to_string(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::song_album_junction::Entity")]
-    SongAlbumJunction,
-    #[sea_orm(has_many = "super::song::Entity")]
-    Song,
+    #[sea_orm(has_many = "super::song_artist_junction::Entity")]
+    SongArtistJunction,
 }
 
 impl Related<super::song::Entity> for Entity {
     fn to() -> RelationDef {
-        super::song_album_junction::Relation::Song.def()
+        super::song_artist_junction::Relation::Song.def()
     }
 
     fn via() -> Option<RelationDef> {
-        Some(super::song_album_junction::Relation::Album.def().rev())
+        Some(super::song_artist_junction::Relation::Artist.def())
     }
 }
 
-impl Related<super::song_album_junction::Entity> for Entity {
+impl Related<super::song_artist_junction::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::SongAlbumJunction.def()
+        Relation::SongArtistJunction.def()
     }
 }
 

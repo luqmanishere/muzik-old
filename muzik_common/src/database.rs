@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use eyre::{eyre, Result};
+use miette::{IntoDiagnostic, Result as MResult};
 use sea_orm_migration::SchemaManager;
 use tracing::{debug, info, warn};
 
@@ -232,6 +233,13 @@ impl AppSong {
         }
     }
 
+    pub fn get_full_path(&self) -> PathBuf {
+        self.path
+            .as_ref()
+            .expect("path should not be empty when this function is called")
+            .clone()
+    }
+
     #[allow(dead_code)]
     pub fn get_filename(&self) -> String {
         self.path
@@ -256,7 +264,26 @@ impl AppSong {
             .to_string()
     }
 
+    /// Used to give the filename which is generated from the title, artist, and yt_id
     pub fn compute_filename(&mut self) {
+        let fname = format!(
+            "{} - {} {}.opus",
+            self.get_title_string(),
+            self.get_artists_string(),
+            self.get_yt_id().unwrap()
+        );
+
+        if let Some(path) = self.path.clone() {
+            let new_path = path.with_file_name(fname);
+            self.path = Some(new_path);
+        } else {
+            let new_path = self.music_dir.clone().unwrap().join(fname);
+            self.path = Some(new_path);
+        }
+    }
+
+    /// trigger a change in the filename
+    pub fn change_filename(&mut self) {
         let fname = format!(
             "{} - {}.opus",
             self.get_title_string(),
@@ -294,19 +321,34 @@ impl Default for AppSong {
 
 // here begins all seaorm dev
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct DbConnection {
     path: Option<PathBuf>,
-    db: DatabaseConnection,
+    db: Option<DatabaseConnection>,
 }
 
-use crate::entities::{prelude::*, *};
-use sea_orm::{prelude::*, ActiveValue, ConnectOptions, QuerySelect};
+use crate::{
+    data::Song as GSong,
+    entities::{artist::ArtistModel, prelude::*, *},
+};
+use sea_orm::{
+    prelude::*, sea_query::extension::postgres, ActiveValue, ConnectOptions, QuerySelect,
+};
 use sea_orm_migration::prelude::*;
 
 impl DbConnection {
+    pub fn default() -> Self {
+        Self {
+            path: None,
+            db: None,
+        }
+    }
     pub async fn new(path: PathBuf) -> Result<Self> {
         let db_path = format!("sqlite:{}?mode=rwc", path.display());
-        let db = sea_orm::Database::connect(db_path).await?;
+        let mut opt = ConnectOptions::new(db_path);
+        opt.sqlx_logging(true)
+            .sqlx_logging_level(tracing::log::LevelFilter::Trace);
+        let db = sea_orm::Database::connect(opt).await?;
 
         let _schema_manager = SchemaManager::new(&db);
 
@@ -315,8 +357,44 @@ impl DbConnection {
 
         Ok(Self {
             path: Some(path),
-            db,
+            db: Some(db),
         })
+    }
+
+    pub async fn m_new(path: PathBuf) -> MResult<Self> {
+        let db_path = format!("sqlite:{}?mode=rwc", path.display());
+        let mut opt = ConnectOptions::new(db_path);
+        opt.sqlx_logging(true)
+            .sqlx_logging_level(tracing::log::LevelFilter::Trace);
+        let db = sea_orm::Database::connect(opt).await.into_diagnostic()?;
+
+        let _schema_manager = SchemaManager::new(&db);
+
+        // ensure up to date
+        crate::migrator::Migrator::up(&db, None)
+            .await
+            .into_diagnostic()?;
+
+        Ok(Self {
+            path: Some(path),
+            db: Some(db),
+        })
+    }
+
+    pub fn ref_db(&self) -> &DatabaseConnection {
+        self.db.as_ref().unwrap()
+    }
+    pub async fn open_in_memory() -> Self {
+        let mut opt = ConnectOptions::new("sqlite::memory:".to_owned());
+        opt.sqlx_logging(true)
+            .sqlx_logging_level(tracing::log::LevelFilter::Debug);
+        let db = sea_orm::Database::connect(opt).await.expect("success");
+        info!("spawned new in memory sqlite database");
+
+        Self {
+            path: None,
+            db: Some(db),
+        }
     }
 
     /// insert an entry into the `artist` table
@@ -324,7 +402,7 @@ impl DbConnection {
     pub async fn insert_artist(&self, artist: String) -> Result<i32> {
         let artist_model = Artist::find()
             .filter(artist::Column::Name.eq(artist.clone()))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?;
         if let Some(artist) = artist_model {
             warn!("artist {} already exists in database", artist.name);
@@ -334,7 +412,10 @@ impl DbConnection {
                 name: ActiveValue::Set(artist.to_owned()),
                 ..Default::default()
             };
-            Ok(Artist::insert(model).exec(&self.db).await?.last_insert_id)
+            Ok(Artist::insert(model)
+                .exec(self.ref_db())
+                .await?
+                .last_insert_id)
         }
     }
 
@@ -346,7 +427,7 @@ impl DbConnection {
             ..Default::default()
         };
         Ok(SongArtistJunction::insert(model)
-            .exec(&self.db)
+            .exec(self.ref_db())
             .await?
             .last_insert_id)
     }
@@ -356,7 +437,7 @@ impl DbConnection {
     pub async fn insert_album(&self, album: String) -> Result<i32> {
         let album_model = Album::find()
             .filter(album::Column::Name.eq(album.clone()))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?;
         if let Some(album) = album_model {
             warn!("album {} exists in database", album.name);
@@ -366,7 +447,10 @@ impl DbConnection {
                 name: ActiveValue::Set(album.to_owned()),
                 ..Default::default()
             };
-            Ok(Album::insert(model).exec(&self.db).await?.last_insert_id)
+            Ok(Album::insert(model)
+                .exec(self.ref_db())
+                .await?
+                .last_insert_id)
         }
     }
 
@@ -378,7 +462,7 @@ impl DbConnection {
             ..Default::default()
         };
         Ok(SongAlbumJunction::insert(model)
-            .exec(&self.db)
+            .exec(self.ref_db())
             .await?
             .last_insert_id)
     }
@@ -387,7 +471,7 @@ impl DbConnection {
     pub async fn insert_genre(&self, genre: String) -> Result<i32> {
         let genre_model = Genre::find()
             .filter(genre::Column::Genre.eq(genre.clone()))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?;
         if let Some(genre) = genre_model {
             warn!("genre {} exists in database", genre.genre);
@@ -397,7 +481,10 @@ impl DbConnection {
                 genre: ActiveValue::Set(genre.to_owned()),
                 ..Default::default()
             };
-            Ok(Genre::insert(model).exec(&self.db).await?.last_insert_id)
+            Ok(Genre::insert(model)
+                .exec(self.ref_db())
+                .await?
+                .last_insert_id)
         }
     }
 
@@ -410,7 +497,7 @@ impl DbConnection {
         };
 
         Ok(SongGenreJunction::insert(model)
-            .exec(&self.db)
+            .exec(self.ref_db())
             .await?
             .last_insert_id)
     }
@@ -419,7 +506,7 @@ impl DbConnection {
     pub async fn insert_youtube_playlist_id(&self, youtube_playlist_id: String) -> Result<i32> {
         let youtube_playlist_id_model = YoutubePlaylistId::find()
             .filter(youtube_playlist_id::Column::YoutubePlaylistId.eq(youtube_playlist_id.clone()))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?;
         if let Some(youtube_playlist_id) = youtube_playlist_id_model {
             warn!(
@@ -433,7 +520,7 @@ impl DbConnection {
                 ..Default::default()
             };
             Ok(YoutubePlaylistId::insert(model)
-                .exec(&self.db)
+                .exec(self.ref_db())
                 .await?
                 .last_insert_id)
         }
@@ -451,7 +538,7 @@ impl DbConnection {
         };
 
         Ok(SongYoutubePlaylistIdJunction::insert(model)
-            .exec(&self.db)
+            .exec(self.ref_db())
             .await?
             .last_insert_id)
     }
@@ -470,14 +557,132 @@ impl DbConnection {
             ..Default::default()
         };
 
-        Ok(prelude::Song::insert(model)
-            .exec(&self.db)
+        Ok(SongEntity::insert(model)
+            .exec(self.ref_db())
             .await?
             .last_insert_id)
     }
 
-    pub async fn get_all_songs(&self, music_dir: PathBuf) -> Result<Vec<AppSong>> {
-        let songs = song::Entity::find().all(&self.db).await?;
+    pub async fn insert_song_with_path(
+        &self,
+        title: String,
+        youtube_id: Option<String>,
+        thumbnail_url: Option<String>,
+        path: Option<PathBuf>,
+    ) -> Result<i32> {
+        let model = song::ActiveModel {
+            title: ActiveValue::Set(title),
+            youtube_id: ActiveValue::Set(youtube_id),
+            thumbnail_url: ActiveValue::Set(thumbnail_url),
+            // should only be the filename to ensure crossplatform
+            path: ActiveValue::Set(path.map(|s| {
+                s.file_name()
+                    .expect("filename")
+                    .to_str()
+                    .expect("managed to convert to string")
+                    .to_string()
+            })),
+            ..Default::default()
+        };
+
+        Ok(SongEntity::insert(model)
+            .exec(self.ref_db())
+            .await?
+            .last_insert_id)
+    }
+
+    pub async fn get_all_songs_gui(&self, music_dir: PathBuf) -> Vec<GSong> {
+        let songs = song::Entity::find()
+            .all(self.ref_db())
+            .await
+            .unwrap_or(vec![]);
+        let mut vvec = vec![];
+        for s in songs {
+            let mut new_song = GSong::new()
+                .set_path(PathBuf::from(s.path.unwrap_or_default()))
+                .set_id(s.id)
+                .set_youtube_id(s.youtube_id.unwrap_or_default())
+                .set_thumbnail_url(s.thumbnail_url.unwrap_or_default())
+                .set_title(s.title);
+
+            let artists = {
+                let mut a_vec = vec![];
+                for (_sa, mut artists) in song::Entity::find()
+                    .find_with_related(Artist)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    artists.sort_by_key(|s1| s1.id);
+                    for artist in artists {
+                        a_vec.push(artist);
+                    }
+                }
+                a_vec
+            };
+            new_song.set_artists(artists);
+
+            let albums = {
+                let mut albums_v = vec![];
+                for (_, albums) in song::Entity::find()
+                    .find_with_related(Album)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for album in albums {
+                        albums_v.push(album);
+                    }
+                }
+                albums_v
+            };
+            new_song.set_albums(albums);
+
+            let genres = {
+                let mut genres_v = vec![];
+                for (_, genres) in song::Entity::find()
+                    .find_with_related(Genre)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for genre in genres {
+                        genres_v.push(genre);
+                    }
+                }
+                genres_v
+            };
+            new_song.set_genres(genres);
+
+            let youtube_playlist_ids = {
+                let mut yt_p_id = vec![];
+                for (_, youtube_playlist_id_model) in song::Entity::find()
+                    .find_with_related(YoutubePlaylistId)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for youtube_playlist_id in youtube_playlist_id_model {
+                        yt_p_id.push(youtube_playlist_id);
+                    }
+                }
+                yt_p_id
+            };
+            new_song.set_youtube_playlists(youtube_playlist_ids);
+            vvec.push(new_song);
+        }
+        vvec
+    }
+
+    pub async fn get_all_songs_empty(&self, music_dir: PathBuf) -> Vec<AppSong> {
+        let songs = song::Entity::find()
+            .all(self.ref_db())
+            .await
+            .unwrap_or(vec![]);
         let mut vvec = vec![];
         for s in songs {
             let mut new_song = AppSong::new()
@@ -486,12 +691,14 @@ impl DbConnection {
                 .with_yt_id(s.youtube_id)
                 .with_tb_url(s.thumbnail_url)
                 .with_title(Some(s.title));
-            for (_sa, artists) in song::Entity::find()
+            for (_sa, mut artists) in song::Entity::find()
                 .find_with_related(Artist)
                 .filter(song::Column::Id.eq(s.id))
-                .all(&self.db)
-                .await?
+                .all(self.ref_db())
+                .await
+                .unwrap_or(vec![])
             {
+                artists.sort_by_key(|s1| s1.id);
                 for artist in artists {
                     new_song.add_artist(artist);
                 }
@@ -499,7 +706,67 @@ impl DbConnection {
             for (_, albums) in song::Entity::find()
                 .find_with_related(Album)
                 .filter(song::Column::Id.eq(s.id))
-                .all(&self.db)
+                .all(self.ref_db())
+                .await
+                .unwrap_or(vec![])
+            {
+                for album in albums {
+                    new_song.add_album(album);
+                }
+            }
+            for (_, genres) in song::Entity::find()
+                .find_with_related(Genre)
+                .filter(song::Column::Id.eq(s.id))
+                .all(self.ref_db())
+                .await
+                .unwrap_or(vec![])
+            {
+                for genre in genres {
+                    new_song.add_genre(genre);
+                }
+            }
+
+            for (_, youtube_playlist_id_model) in song::Entity::find()
+                .find_with_related(YoutubePlaylistId)
+                .filter(song::Column::Id.eq(s.id))
+                .all(self.ref_db())
+                .await
+                .unwrap_or(vec![])
+            {
+                for youtube_playlist_id in youtube_playlist_id_model {
+                    new_song.add_yt_playlist_id(youtube_playlist_id);
+                }
+            }
+            new_song.compute_filename();
+            vvec.push(new_song);
+        }
+        vvec
+    }
+    pub async fn get_all_songs(&self, music_dir: PathBuf) -> Result<Vec<AppSong>> {
+        let songs = song::Entity::find().all(self.ref_db()).await?;
+        let mut vvec = vec![];
+        for s in songs {
+            let mut new_song = AppSong::new()
+                .with_music_dir(Some(music_dir.clone()))
+                .with_id(Some(s.id))
+                .with_yt_id(s.youtube_id)
+                .with_tb_url(s.thumbnail_url)
+                .with_title(Some(s.title));
+            for (_sa, mut artists) in song::Entity::find()
+                .find_with_related(Artist)
+                .filter(song::Column::Id.eq(s.id))
+                .all(self.ref_db())
+                .await?
+            {
+                artists.sort_by_key(|s1| s1.id);
+                for artist in artists {
+                    new_song.add_artist(artist);
+                }
+            }
+            for (_, albums) in song::Entity::find()
+                .find_with_related(Album)
+                .filter(song::Column::Id.eq(s.id))
+                .all(self.ref_db())
                 .await?
             {
                 for album in albums {
@@ -509,7 +776,7 @@ impl DbConnection {
             for (_, genres) in song::Entity::find()
                 .find_with_related(Genre)
                 .filter(song::Column::Id.eq(s.id))
-                .all(&self.db)
+                .all(self.ref_db())
                 .await?
             {
                 for genre in genres {
@@ -520,7 +787,7 @@ impl DbConnection {
             for (_, youtube_playlist_id_model) in song::Entity::find()
                 .find_with_related(YoutubePlaylistId)
                 .filter(song::Column::Id.eq(s.id))
-                .all(&self.db)
+                .all(self.ref_db())
                 .await?
             {
                 for youtube_playlist_id in youtube_playlist_id_model {
@@ -537,7 +804,7 @@ impl DbConnection {
         let artists_vec = Artist::find()
             .select_only()
             .column(artist::Column::Name)
-            .all(&self.db)
+            .all(self.ref_db())
             .await?;
 
         Ok(artists_vec
@@ -546,6 +813,66 @@ impl DbConnection {
             .collect::<Vec<String>>())
     }
 
+    pub async fn check_song_in_database(&self, song: &GSong) -> bool {
+        // check if id exists
+        if let Some(db_id) = song.id {
+            let possible_song: Option<song::Model> = song::Entity::find_by_id(db_id)
+                .one(self.ref_db())
+                .await
+                .expect("operation success");
+            match possible_song {
+                Some(possible_song) => {
+                    // compare elements parsed from the file and from song only
+                    let filename = song
+                        .path
+                        .as_ref()
+                        .expect("has path")
+                        .file_name()
+                        .expect("has filename")
+                        .to_str()
+                        .expect("to_str")
+                        .to_string();
+
+                    // TODO: compare other fields as well
+                    possible_song.title == song.get_title_string()
+                        && possible_song.path.unwrap_or_default() == filename
+                }
+                None => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    pub async fn insert_from_gui_song(&self, mut song: GSong) -> Result<GSong> {
+        let title = song.get_title_string();
+        let youtube_id = song.youtube_id.clone();
+        let thumbnail_url = song.thumbnail_url.clone();
+        let path = song.path.clone();
+        let song_id = self
+            .insert_song_with_path(title, youtube_id, thumbnail_url, path)
+            .await?;
+
+        let artists_vec = song.artists.clone().unwrap_or(vec![]);
+        for artist in artists_vec {
+            let artist_id = self.insert_artist(artist.name).await?;
+            self.insert_song_artist(artist_id, song_id).await?;
+        }
+
+        let albums_vec = song.albums.clone().unwrap_or(vec![]);
+        for album in albums_vec {
+            let album_id = self.insert_album(album.name).await?;
+            self.insert_song_album(album_id, song_id).await?;
+        }
+
+        let genres_vec = song.genres.clone().unwrap_or(vec![]);
+        for genre in genres_vec {
+            let genre_id = self.insert_genre(genre.genre).await?;
+            self.insert_song_genre(genre_id, song_id).await?;
+        }
+
+        Ok(song.set_id(song_id))
+    }
     pub async fn insert_from_app_song(&self, song: AppSong) -> Result<()> {
         let title = song.get_title_string();
         let youtube_id = song.yt_id;
@@ -585,9 +912,12 @@ impl DbConnection {
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
             thumbnail_url: ActiveValue::Set(thumbnail_url),
+            // TODO: update path here
+            ..Default::default()
         };
+        todo!("implement updating the path value");
 
-        Ok(Song::update(model).exec(&self.db).await?.id)
+        Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
     }
 
     pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<()> {
@@ -607,18 +937,18 @@ impl DbConnection {
             // delete all foreign keys
             SongArtistJunction::delete_many()
                 .filter(song_artist_junction::Column::SongId.eq(song_id))
-                .exec(&self.db)
+                .exec(self.ref_db())
                 .await?;
             SongAlbumJunction::delete_many()
                 .filter(song_album_junction::Column::SongId.eq(song_id))
-                .exec(&self.db)
+                .exec(self.ref_db())
                 .await?;
             SongGenreJunction::delete_many()
                 .filter(song_genre_junction::Column::SongId.eq(song_id))
-                .exec(&self.db)
+                .exec(self.ref_db())
                 .await?;
-            Ok(Song::delete_by_id(song_id)
-                .exec(&self.db)
+            Ok(SongEntity::delete_by_id(song_id)
+                .exec(self.ref_db())
                 .await?
                 .rows_affected)
         } else {
@@ -629,20 +959,20 @@ impl DbConnection {
     pub async fn delete_song_artist(&self, artist_id: i32) -> Result<()> {
         let model = SongArtistJunction::find()
             .filter(song_artist_junction::Column::ArtistId.eq(artist_id))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?
             .expect("One SongArtistJunction model is given");
-        model.delete(&self.db).await?;
+        model.delete(self.ref_db()).await?;
         Ok(())
     }
 
     pub async fn delete_song_album(&self, album_id: i32) -> Result<()> {
         let model = SongAlbumJunction::find()
             .filter(song_album_junction::Column::AlbumId.eq(album_id))
-            .one(&self.db)
+            .one(self.ref_db())
             .await?
             .expect("One SongAlbumJunction model is given");
-        model.delete(&self.db).await?;
+        model.delete(self.ref_db()).await?;
         Ok(())
     }
 
@@ -653,14 +983,17 @@ impl DbConnection {
         let db = sea_orm::Database::connect(opt).await?;
         info!("spawned new in memory sqlite database");
 
-        let strct = Self { path: None, db };
+        let strct = Self {
+            path: None,
+            db: Some(db),
+        };
         strct.test_db().await?;
         Ok(())
     }
 
     pub async fn test_db(&self) -> Result<()> {
         // ensure database is up to date
-        crate::migrator::Migrator::refresh(&self.db).await?;
+        crate::migrator::Migrator::refresh(self.ref_db()).await?;
 
         for artist in [
             "Hoshimashi Suisei",
@@ -700,7 +1033,7 @@ impl DbConnection {
         for artist in ["Hoshimashi Suisei", "Comet-chan"] {
             if let Some(artist_id) = Artist::find()
                 .filter(artist::Column::Name.eq(artist))
-                .one(&self.db)
+                .one(self.ref_db())
                 .await?
             {
                 self.insert_song_artist(artist_id.id, 1).await?;
@@ -710,7 +1043,7 @@ impl DbConnection {
         for artist in ["Minato Aqua"] {
             if let Some(artist_id) = Artist::find()
                 .filter(artist::Column::Name.eq(artist))
-                .one(&self.db)
+                .one(self.ref_db())
                 .await?
             {
                 self.insert_song_artist(artist_id.id, 2).await?;
@@ -720,7 +1053,7 @@ impl DbConnection {
         for album in ["Still Still Stellar"] {
             if let Some(album_model) = Album::find()
                 .filter(album::Column::Name.eq(album))
-                .one(&self.db)
+                .one(self.ref_db())
                 .await?
             {
                 self.insert_song_album(album_model.id, 1).await?;
@@ -730,7 +1063,7 @@ impl DbConnection {
         for album in ["Minato Aqua Originals"] {
             if let Some(album_model) = Album::find()
                 .filter(album::Column::Name.eq(album))
-                .one(&self.db)
+                .one(self.ref_db())
                 .await?
             {
                 self.insert_song_album(album_model.id, 2).await?;
@@ -740,7 +1073,7 @@ impl DbConnection {
         for genre in ["Vtuber", "Jpop"] {
             if let Some(genre_model) = Genre::find()
                 .filter(genre::Column::Genre.eq(genre))
-                .one(&self.db)
+                .one(self.ref_db())
                 .await?
             {
                 self.insert_song_genre(genre_model.id, 1).await?;

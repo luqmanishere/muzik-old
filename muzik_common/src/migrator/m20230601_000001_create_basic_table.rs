@@ -161,4 +161,6 @@ pub enum Song {
     Title,
     YoutubeId,
     ThumbnailUrl,
+    // Added on 26-08-2023
+    Path,
 }

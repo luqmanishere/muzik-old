@@ -4,21 +4,19 @@ use clap::{Parser, Subcommand};
 use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
 use eyre::{eyre, Result};
 use tracing::{debug, error, info};
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
     filter, fmt, prelude::__tracing_subscriber_SubscriberExt, EnvFilter, Layer,
 };
 use youtube_dl::{SearchOptions, YoutubeDl};
 
-mod config;
-mod database;
-mod entities;
-mod migrator;
-mod tags;
-mod tui;
-mod util;
+use muzik_common::{
+    database::{self, AppSong},
+    tags,
+};
 
-use crate::{config::ReadConfig, database::AppSong};
+use crate::config::ReadConfig;
+
+mod config;
 
 #[derive(Debug, Parser)]
 #[command(name = "muzik")]
@@ -36,7 +34,6 @@ enum Commands {
     },
     List,
     Delete,
-    Tui,
     DbTest,
 }
 
@@ -59,12 +56,6 @@ async fn main() -> Result<()> {
             Commands::List => list_command().await.unwrap(),
             // TODO: switch to new backend
             Commands::Delete => delete_command().await.unwrap(),
-            Commands::Tui => {
-                // let tempdir = tempfile::tempdir()?;
-                // let mut _guards = start_tui_log(tempdir.path().to_path_buf());
-                let mut _guards = start_tui_log(PathBuf::from("/tmp"));
-                tui_command().await.unwrap()
-            }
             Commands::DbTest => {
                 // construct a subscriber that prints formatted traces to stdout
                 let _subscriber = tracing_subscriber::registry().with(
@@ -93,16 +84,6 @@ async fn main() -> Result<()> {
     };
 
     // Return gracefully
-    Ok(())
-}
-
-async fn tui_command() -> Result<()> {
-    match tui::run_tui().await {
-        Ok(_) => (),
-        Err(e) => {
-            error!("Fatal error: {}", e);
-        }
-    }
     Ok(())
 }
 
@@ -285,29 +266,4 @@ async fn delete_command() -> Result<()> {
     // };
 
     Ok(())
-}
-
-fn start_tui_log(tmp: PathBuf) -> Vec<WorkerGuard> {
-    let mut guards = vec![];
-
-    let tmp = tmp.join("muzik");
-    let file_appender = tracing_appender::rolling::daily(tmp, "log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    guards.push(guard);
-
-    // Only write logs to log file
-    let subs = tracing_subscriber::registry().with(
-        fmt::Layer::new()
-            .with_writer(non_blocking)
-            .with_ansi(false)
-            .with_timer(tracing_subscriber::fmt::time::time())
-            .with_filter(
-                tracing_subscriber::filter::EnvFilter::builder()
-                    .with_default_directive(filter::LevelFilter::INFO.into())
-                    .from_env_lossy(),
-            ),
-    );
-    tracing::subscriber::set_global_default(subs).expect("setting default subscriber failed");
-    info!("logger started!");
-    guards
 }

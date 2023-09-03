@@ -1,14 +1,10 @@
 [package]
-name = "muzik"
+name = "muzik_tui"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[workspace]
-members = ["muzik_common", "muzik_tui", "muzik_gui"]
-
 [dependencies]
-muzik_common = { path = "./muzik_common" }
+muzik_common = { path = "../muzik_common" }
 eyre = "0.6"
 youtube_dl = { version = "0.8", default-features = false, features = ["tokio"] }
 tokio = { version = "1", features = ["full"] }

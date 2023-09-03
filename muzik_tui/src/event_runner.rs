@@ -6,18 +6,19 @@ use cursive::{
     CbSink, Cursive,
 };
 use eyre::{Context, Result};
+use muzik_common::{
+    entities::*,
+    tags,
+    util::{download_from_youtube, search_youtube, search_youtube_playlist}, database::AppSong,
+};
 use tracing::{debug, error, info, instrument, warn};
 use youtube_dl::SingleVideo;
 
+use crate::download::draw_metadata_editor;
+
+use super::config::Config;
+use super::metadata::draw_list_confirm_box;
 use super::metadata::draw_metadata_yt_sync;
-use crate::{
-    config::Config,
-    entities::*,
-    tags,
-    tui::metadata::draw_list_confirm_box,
-    util::{download_from_youtube, search_youtube, search_youtube_playlist},
-};
-use crate::{database::AppSong, tui::download::draw_metadata_editor};
 
 #[derive(Default)]
 struct AppState {
@@ -70,13 +71,9 @@ impl EventRunner {
                                 view.add_all(items);
                             },
                         );
-                        // Notify on finish loading
-                        let text = format!("Done searching for: {}", kw);
-                        siv.call_on_all_named("statusbar", |view: &mut TextView| {
-                            view.set_content(&text);
-                        });
                     }))
                     .unwrap();
+                self.notify_ui(format!("Done searching for: {}", kw));
             }
             Err(e) => return Err(e.wrap_err("error while searching youtube")),
         }
@@ -97,7 +94,7 @@ impl EventRunner {
         let status_text = format!("Downloading: {}: {}", title, artist);
         self.notify_ui(status_text);
 
-        let filename_format = format!("{} - {}.%(ext)s", title, artist);
+        let filename_format = format!("{} - {} {}.%(ext)s", title, artist, id);
         let filename = format!("{} - {} {}.opus", title, artist, id);
         let filename = song.get_music_dir().join(filename);
         let _youtube = download_from_youtube(
@@ -533,7 +530,7 @@ impl EventRunner {
         let music_dir = self.config.music_dir.clone();
         let genre = metadata.genre.unwrap_or("Unknown".to_string());
 
-        let mut song = crate::database::AppSong::new()
+        let mut song = AppSong::new()
             .with_music_dir(Some(music_dir))
             .with_title(metadata.title)
             .with_albums(metadata.album.unwrap_or("Unknown".to_string()))

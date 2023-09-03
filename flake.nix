@@ -60,14 +60,33 @@
           # look at documentation for more options
           overrides = {
             add-inputs.overrideAttrs = old: {
-              nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
-              buildInputs =
+              nativeBuildInputs =
+                (old.nativeBuildInputs or [])
+                ++ [
+                  pkgs.makeWrapper
+                  pkgs.llvmPackages_16.bintools
+                ];
+              buildInputs = with pkgs;
                 (old.buildInputs or [])
                 ++ [
+                  pkgs.llvmPackages_16.bintools
                   pkgs.pkg-config
                   pkgs.openssl.dev
                   pkgs.openssl
                   pkgs.perl
+                  openssl.dev
+                  glib.dev
+                  gdk-pixbuf.dev
+                  pango.dev
+                  cairo.dev
+                  gtk3.dev
+                  harfbuzz.dev
+                  webkitgtk.dev
+                  libayatana-appindicator.dev
+                  atk.dev
+                  webkitgtk_4_1.dev
+                  libsoup_3.dev
+                  zlib.dev
                 ];
               postInstall = ''
                 wrapProgram "$out/bin/${crateName}" --set PATH ${binPath}
@@ -76,8 +95,35 @@
           };
           depsOverrides = {
             add-inputs.overrideAttrs = old: {
-              nativeBuildInputs = (old.nativeBuildInputs or []) ++ [];
-              buildInputs = (old.buildInputs or []) ++ [pkgs.pkg-config pkgs.openssl.dev pkgs.openssl pkgs.perl];
+              nativeBuildInputs =
+                (old.nativeBuildInputs or [])
+                ++ [
+                ];
+              buildInputs = with pkgs;
+                (
+                  old.buildInputs
+                  or [
+                  ]
+                )
+                ++ [
+                  pkgs.pkg-config
+                  pkgs.openssl.dev
+                  pkgs.openssl
+                  pkgs.perl
+                  openssl.dev
+                  glib.dev
+                  gdk-pixbuf.dev
+                  pango.dev
+                  cairo.dev
+                  gtk3.dev
+                  harfbuzz.dev
+                  webkitgtk.dev
+                  libayatana-appindicator.dev
+                  atk.dev
+                  webkitgtk_4_1.dev
+                  libsoup_3.dev
+                  zlib.dev
+                ];
             };
           };
         };
@@ -86,8 +132,8 @@
           env = [
             /*
             {
-              name = "RUST_SRC_PATH";
-              value = rustPlatform.rustLibSrc;
+            name = "RUST_SRC_PATH";
+            value = rustPlatform.rustLibSrc;
             }
             */
             {
@@ -98,7 +144,29 @@
             }
             {
               name = "PKG_CONFIG_PATH";
-              value = "${openssl.dev}/lib/pkgconfig";
+              value = lib.strings.makeSearchPath "lib/pkgconfig" [
+                zlib.dev
+                openssl.dev
+                glib.dev
+                gdk-pixbuf.dev
+                pango.dev
+                cairo.dev
+                gtk3.dev
+                harfbuzz.dev
+                webkitgtk.dev
+                libayatana-appindicator.dev
+                atk.dev
+                webkitgtk_4_1.dev
+                libsoup_3.dev
+              ];
+            }
+            {
+              name = "LD_FLAGS";
+              value = "-L${zlib}/lib";
+            }
+            {
+              name = "LD_LIBRARY_PATH";
+              value = lib.makeLibraryPath [zlib];
             }
           ];
 
@@ -114,6 +182,9 @@
             jq
             yt-dlp
             opusTools
+            zlib
+            zlib.dev
+            llvmPackages_16.bintools
           ];
 
           commands = [

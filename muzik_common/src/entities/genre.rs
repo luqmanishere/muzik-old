@@ -2,12 +2,23 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type GenreModel = Model;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "genre")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub genre: String,
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            genre: "Unknown".to_string(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
