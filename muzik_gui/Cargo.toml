@@ -1,0 +1,27 @@
+[package]
+name = "muzik_gui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "muzik-gui"
+path = "src/main.rs"
+
+[dependencies]
+muzik_common = { path = "../muzik_common" }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+miette = { version = "5", features = ["fancy"] }
+etcetera = { version = "0.8" }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "fmt",
+    "time",
+] }
+iced = { version = "0.10", features = ["tokio", "image", "advanced"] }
+iced_aw = { version = "0.7", features = ["split", "tabs"] }
+iced_native = "0.10"
+image = { version = "^0" }
+serde = { version = "1", features = ["derive"] }
+toml = { version = "0.7" }
