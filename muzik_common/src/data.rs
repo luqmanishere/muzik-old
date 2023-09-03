@@ -1,7 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use iced::Element;
-use sanitize_filename::Options;
 use tracing::debug;
 
 use crate::{
@@ -12,11 +10,6 @@ use crate::{
     },
     tags,
 };
-
-pub trait Data {
-    type Message;
-    fn view<'a>() -> Element<'a, Self::Message>;
-}
 
 /// Source of the song file. Other than local is supported download source
 #[derive(Debug, Clone, Default)]

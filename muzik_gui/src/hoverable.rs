@@ -87,7 +87,7 @@ where
             return event::Status::Captured;
         }
 
-        let mut state = tree.state.downcast_mut::<State>();
+        let state = tree.state.downcast_mut::<State>();
         let was_hovered = state.is_hovered;
         let now_hovered = layout.bounds().contains(cursor_position);
 
@@ -119,21 +119,21 @@ where
 
     fn layout(
         &self,
-        renderer: &Renderer,
-        limits: &iced_native::layout::Limits,
+        _renderer: &Renderer,
+        _limits: &iced_native::layout::Limits,
     ) -> iced_native::layout::Node {
         todo!()
     }
 
     fn draw(
         &self,
-        state: &Tree,
-        renderer: &mut Renderer,
-        theme: &<Renderer as iced_native::Renderer>::Theme,
-        style: &iced_native::renderer::Style,
-        layout: Layout<'_>,
-        cursor_position: iced_native::Point,
-        viewport: &iced_native::Rectangle,
+        _state: &Tree,
+        _renderer: &mut Renderer,
+        _theme: &<Renderer as iced_native::Renderer>::Theme,
+        _style: &iced_native::renderer::Style,
+        _layout: Layout<'_>,
+        _cursor_position: iced_native::Point,
+        _viewport: &iced_native::Rectangle,
     ) {
         todo!()
     }

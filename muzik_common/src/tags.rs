@@ -1,18 +1,13 @@
 use std::{io::Cursor, path::PathBuf};
 
 use eyre::{eyre, Result};
-use iced::futures::future::ErrInto;
 use lofty::{Accessor, ItemKey, ItemValue, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
 use tracing::error;
 
 use crate::{
+    data::Song,
     database::AppSong,
-    entities::{
-        album::AlbumModel,
-        artist::ArtistModel,
-        genre::{self, GenreModel},
-    },
-    gui::data::Song,
+    entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
 };
 
 pub async fn write_tags_async(path: PathBuf, song: &AppSong) -> Result<()> {

@@ -7,16 +7,13 @@ use iced::{
     Application, Command, Element, Event, Length,
 };
 use iced_aw::{TabLabel, Tabs};
+use muzik_common::database::DbConnection;
 
-use crate::{config::Config, database::DbConnection};
+use crate::{
+    config::Config,
+    editor::{EditorMessage, EditorTab},
+};
 
-use self::editor::{EditorMessage, EditorTab};
-
-pub(crate) mod data;
-mod editor;
-mod hoverable;
-mod multi_input;
-mod theme;
 /// GUI start point
 #[allow(dead_code)]
 pub struct GuiMain {
@@ -42,7 +39,7 @@ impl Application for GuiMain {
                 config: _flags.clone(),
                 db: db.clone(),
                 active_tab: TabId::Editor,
-                editor_state: editor_state,
+                editor_state,
             },
             Command::batch(comms),
         )

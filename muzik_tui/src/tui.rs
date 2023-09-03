@@ -7,14 +7,9 @@ use cursive_tabs::TabPanel;
 use eyre::Result;
 use tracing::error;
 
-use crate::config::ReadConfig;
+use crate::{config::ReadConfig, download, editor, event_runner};
 
-use self::event_runner::Event;
-
-mod download;
-mod editor;
-mod event_runner;
-mod metadata;
+use crate::event_runner::Event;
 
 pub async fn run_tui() -> Result<()> {
     let mut siv = Cursive::new();

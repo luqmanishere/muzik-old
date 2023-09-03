@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use eyre::{eyre, Result};
+use miette::{IntoDiagnostic, Result as MResult};
 use sea_orm_migration::SchemaManager;
 use tracing::{debug, info, warn};
 
@@ -327,8 +328,8 @@ pub struct DbConnection {
 }
 
 use crate::{
+    data::Song as GSong,
     entities::{artist::ArtistModel, prelude::*, *},
-    gui::data::Song as GSong,
 };
 use sea_orm::{
     prelude::*, sea_query::extension::postgres, ActiveValue, ConnectOptions, QuerySelect,
@@ -353,6 +354,26 @@ impl DbConnection {
 
         // ensure up to date
         crate::migrator::Migrator::up(&db, None).await?;
+
+        Ok(Self {
+            path: Some(path),
+            db: Some(db),
+        })
+    }
+
+    pub async fn m_new(path: PathBuf) -> MResult<Self> {
+        let db_path = format!("sqlite:{}?mode=rwc", path.display());
+        let mut opt = ConnectOptions::new(db_path);
+        opt.sqlx_logging(true)
+            .sqlx_logging_level(tracing::log::LevelFilter::Trace);
+        let db = sea_orm::Database::connect(opt).await.into_diagnostic()?;
+
+        let _schema_manager = SchemaManager::new(&db);
+
+        // ensure up to date
+        crate::migrator::Migrator::up(&db, None)
+            .await
+            .into_diagnostic()?;
 
         Ok(Self {
             path: Some(path),
@@ -570,7 +591,7 @@ impl DbConnection {
             .last_insert_id)
     }
 
-    pub async fn get_all_songs_gui(&self, music_dir: PathBuf) -> Vec<crate::gui::data::Song> {
+    pub async fn get_all_songs_gui(&self, music_dir: PathBuf) -> Vec<GSong> {
         let songs = song::Entity::find()
             .all(self.ref_db())
             .await
@@ -792,7 +813,7 @@ impl DbConnection {
             .collect::<Vec<String>>())
     }
 
-    pub async fn check_song_in_database(&self, song: &crate::gui::data::Song) -> bool {
+    pub async fn check_song_in_database(&self, song: &GSong) -> bool {
         // check if id exists
         if let Some(db_id) = song.id {
             let possible_song: Option<song::Model> = song::Entity::find_by_id(db_id)
@@ -823,10 +844,7 @@ impl DbConnection {
         }
     }
 
-    pub async fn insert_from_gui_song(
-        &self,
-        mut song: crate::gui::data::Song,
-    ) -> Result<crate::gui::data::Song> {
+    pub async fn insert_from_gui_song(&self, mut song: GSong) -> Result<GSong> {
         let title = song.get_title_string();
         let youtube_id = song.youtube_id.clone();
         let thumbnail_url = song.thumbnail_url.clone();

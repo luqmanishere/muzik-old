@@ -33,7 +33,7 @@ impl<M> MultiStringInput<M> {
         F: 'static + Fn((usize, MultiStringInputMessage)) -> M + Copy,
         M: 'static,
     {
-        let mut text_i =
+        let text_i =
             TextInput::new(placeholder, &self.value).on_input(MultiStringInputMessage::Change);
         Element::new(text_i).map(move |i| on_change((id, i)))
     }

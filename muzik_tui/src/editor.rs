@@ -8,12 +8,11 @@ use cursive::{
     },
     Cursive,
 };
-use tracing::debug;
-
-use crate::{
+use muzik_common::{
     database::AppSong,
     entities::{album, artist, genre},
 };
+use tracing::debug;
 
 use super::event_runner::Event;
 

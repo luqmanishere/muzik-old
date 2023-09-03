@@ -1,34 +1,27 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
-use dialoguer::Editor;
-use eyre::Result;
 use iced::{
     alignment,
     widget::{
         checkbox, column, container, image::Handle, row, scrollable, text, vertical_space, Button,
         Column, Image, Text,
     },
-    Alignment, Color, Command, Element, Length,
+    Command, Element, Length,
 };
 use iced_aw::{Split, TabLabel};
-use image::EncodableLayout;
 use tracing::{error, info, trace};
 
-use crate::{
-    config::Config,
+use crate::config::Config;
+use muzik_common::{
+    data::{load_songs, Song},
     database::DbConnection,
-    entities::{
-        album::AlbumModel,
-        artist::ArtistModel,
-        genre::{self, GenreModel},
-    },
+    entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
     tags::{self, write_tags_song},
 };
 
 use super::{
-    data::{load_songs, Song},
+    gui::{Msg, Tab},
     multi_input::{MultiStringInput, MultiStringInputMessage},
-    Msg, Tab,
 };
 
 #[derive(Debug, Clone)]
@@ -81,8 +74,8 @@ pub struct EditorTab {
 impl EditorTab {
     pub fn new(config: Config, db: Arc<DbConnection>) -> Self {
         Self {
-            config: config,
-            db: db,
+            config,
+            db,
             db_songs_vec: None,
             db_songs_visibility: false,
             local_songs_vec: None,
@@ -99,13 +92,13 @@ impl EditorTab {
         }
     }
 
-    pub fn new_with_command(config: Config, db: Arc<DbConnection>) -> (Self, Command<super::Msg>) {
+    pub fn new_with_command(config: Config, db: Arc<DbConnection>) -> (Self, Command<Msg>) {
         let music_dir = config.get_music_dir();
         let db_conn = db.clone();
         (
             Self {
-                config: config,
-                db: db,
+                config,
+                db,
                 db_songs_vec: None,
                 db_songs_visibility: false,
                 local_songs_vec: None,
@@ -121,7 +114,7 @@ impl EditorTab {
                 genre_text_input: None,
             },
             Command::perform(async { load_songs(music_dir, db_conn).await }, |result| {
-                super::Msg::Editor(EditorMessage::LoadedLocalSongs(result))
+                Msg::Editor(EditorMessage::LoadedLocalSongs(result))
             }),
         )
     }
@@ -186,7 +179,7 @@ impl EditorTab {
 
 impl Tab for EditorTab {
     type Message = EditorMessage;
-    type ReturnMessage = super::Msg;
+    type ReturnMessage = Msg;
 
     fn title(&self) -> String {
         "editor".to_string()
@@ -205,12 +198,12 @@ impl Tab for EditorTab {
             let mut songs = vec![];
 
             if let Some(local_songs) = self.local_songs_vec.as_ref() {
-                for item in local_songs.iter().map(|msongs| msongs.local_view()) {
+                for item in local_songs.iter().map(|msongs| msongs.view()) {
                     songs.push(item);
                 }
             }
 
-            if songs.len() > 0 {
+            if !songs.is_empty() {
                 scrollable(column(songs)).into()
             } else {
                 text("loading.......").into()
@@ -241,7 +234,7 @@ impl Tab for EditorTab {
             let title = Text::new("Title");
             let title_input = iced::widget::TextInput::new(
                 &song.get_title_string(),
-                &self.title_text_input.as_ref().unwrap_or(&String::new()),
+                self.title_text_input.as_ref().unwrap_or(&String::new()),
             )
             .on_input(|input| Msg::Editor(EditorMessage::TitleTextInput(input)));
 
@@ -377,7 +370,7 @@ impl Tab for EditorTab {
         match message {
             // todo: load local and database in the same function
             EditorMessage::LoadedDbSongs(result_db_songs_vec) => {
-                if result_db_songs_vec.len() > 0 {
+                if !result_db_songs_vec.is_empty() {
                     self.db_songs_vec = Some(result_db_songs_vec);
                 } else {
                     self.db_songs_vec = None;
@@ -486,7 +479,7 @@ impl Tab for EditorTab {
                 // todo: if in database, update. if not in database, add new
                 if let Some(current_song) = self.current_app_song.as_ref() {
                     match current_song.id {
-                        Some(id) => {
+                        Some(_id) => {
                             // is in database
                         }
                         None => {
@@ -574,8 +567,15 @@ impl Tab for EditorTab {
     }
 }
 
-impl Song {
-    fn local_view(&self) -> Element<super::Msg> {
+trait Disp {
+    type Message;
+
+    fn view(&self) -> Element<Self::Message>;
+}
+
+impl Disp for Song {
+    type Message = Msg;
+    fn view(&self) -> Element<Self::Message> {
         // TODO: display picture
         let t = format!(
             "{} - {} [{}]",
