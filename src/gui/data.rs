@@ -53,7 +53,7 @@ pub struct Song {
     /// Online thumbnail source
     pub thumbnail_url: Option<String>,
     /// Local thumbnail
-    thumbnail: Option<image::DynamicImage>,
+    pub thumbnail: Option<Vec<u8>>,
     /// Source of the file
     source: Source,
     pub update_required: bool,
@@ -131,8 +131,6 @@ impl Song {
         self.source = source;
         self.clone()
     }
-
-    // TODO: figure out whether path is generated or given
 
     /// Returns database id if in database
     pub fn identify(&self) -> String {

@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use eyre::Result;
 use iced::{
-    keyboard::{self, Modifiers},
+    keyboard::{self, KeyCode, Modifiers},
     theme::Theme,
     widget::{container, text, Column},
     Application, Command, Element, Event, Length,
 };
 use iced_aw::{TabLabel, Tabs};
-use iced_native::subscription;
 
 use crate::{config::Config, database::DbConnection};
 
@@ -58,17 +56,24 @@ impl Application for GuiMain {
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        const NO_MODIFIER: Modifiers = Modifiers::empty();
         match message {
             Msg::Editor(msg) => return self.editor_state.update(msg),
             Msg::TabSelected(tab_id) => self.active_tab = tab_id,
             Msg::IcedEvent(event) => {
                 // TODO: handle keyboard events not input here
-                if let Event::Keyboard(keyboard::Event::KeyPressed {
-                    key_code: keyboard::KeyCode::Down,
-                    modifiers: Modifiers::CTRL,
-                }) = event
-                {
-                    return iced::widget::focus_next();
+                match event {
+                    Event::Keyboard(keyboard::Event::KeyPressed {
+                        key_code,
+                        modifiers,
+                    }) => match modifiers {
+                        NO_MODIFIER => match key_code {
+                            KeyCode::Tab => return iced::widget::focus_next(),
+                            _ => {}
+                        },
+                        _ => {}
+                    },
+                    _ => {}
                 }
             }
             Msg::None => {}

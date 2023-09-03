@@ -40,8 +40,8 @@ sea-orm = { version = "^0", features = [
 sea-orm-migration = "^0"
 async-trait = "0.1"
 crossbeam-channel = "0.5"
-iced = { version = "0.10", features = ["tokio", "image"] }
-iced_aw = { version = "0.6", features = ["split", "tabs"] }
+iced = { version = "0.10", features = ["tokio", "image", "advanced"] }
+iced_aw = { version = "0.7", features = ["split", "tabs"] }
 iced_native = "0.10"
 walkdir = "2"
 mime_guess = "2"

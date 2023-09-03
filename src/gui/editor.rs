@@ -5,11 +5,13 @@ use eyre::Result;
 use iced::{
     alignment,
     widget::{
-        checkbox, column, container, row, scrollable, text, vertical_space, Button, Column, Text,
+        checkbox, column, container, image::Handle, row, scrollable, text, vertical_space, Button,
+        Column, Image, Text,
     },
     Alignment, Color, Command, Element, Length,
 };
 use iced_aw::{Split, TabLabel};
+use image::EncodableLayout;
 use tracing::{error, info, trace};
 
 use crate::{
@@ -37,6 +39,7 @@ pub enum EditorMessage {
     DbVisibleToggle(bool),
     DividerResize(u16),
     SongButton(Song),
+    LoadSongImage(Vec<u8>),
 
     TitleTextInput(String),
 
@@ -65,7 +68,9 @@ pub struct EditorTab {
     local_songs_vec: Option<Vec<Song>>,
     displayed_songs_vec: Option<Vec<Song>>,
     hor_divider_pos: Option<u16>,
+
     current_app_song: Option<Song>,
+    current_app_song_image: Option<Vec<u8>>,
 
     title_text_input: Option<String>,
     artist_text_input: Option<Vec<MultiStringInput<Msg>>>,
@@ -83,7 +88,9 @@ impl EditorTab {
             local_songs_vec: None,
             displayed_songs_vec: None,
             hor_divider_pos: None,
+
             current_app_song: None,
+            current_app_song_image: None,
 
             title_text_input: None,
             artist_text_input: None,
@@ -104,7 +111,9 @@ impl EditorTab {
                 local_songs_vec: None,
                 displayed_songs_vec: None,
                 hor_divider_pos: None,
+
                 current_app_song: None,
+                current_app_song_image: None,
 
                 title_text_input: None,
                 artist_text_input: None,
@@ -206,20 +215,38 @@ impl Tab for EditorTab {
             } else {
                 text("loading.......").into()
             }
-
-            // TODO: show if song is in DB
         };
 
         let second_panel: Element<_> = if let Some(song) = self.current_app_song.as_ref() {
-            let title = Text::new("Title").into();
+            let mut sp_col = Column::new();
+
+            // render image if available
+            let img_header = text("Image");
+            let img: Element<_> = if let Some(pic_vec) = self.current_app_song_image.as_ref() {
+                if !pic_vec.is_empty() {
+                    // todo: add frame around image display
+                    // todo: make image display resizable
+                    Image::new(Handle::from_memory(pic_vec.clone()))
+                        .width(200)
+                        .height(200)
+                        .into()
+                } else {
+                    text("no image found!").into()
+                }
+            } else {
+                text("loading").into()
+            };
+            sp_col = sp_col.push(img_header).push(img);
+
+            let title = Text::new("Title");
             let title_input = iced::widget::TextInput::new(
                 &song.get_title_string(),
                 &self.title_text_input.as_ref().unwrap_or(&String::new()),
             )
-            .on_input(|input| Msg::Editor(EditorMessage::TitleTextInput(input)))
-            .into();
+            .on_input(|input| Msg::Editor(EditorMessage::TitleTextInput(input)));
 
-            let artist = Text::new("Artists").into();
+            sp_col = sp_col.push(title).push(title_input);
+            let artist = text("Artists");
             let add_artist_button = Button::new("Add Artist")
                 .on_press(Msg::Editor(EditorMessage::AddArtistButton))
                 .into();
@@ -235,8 +262,17 @@ impl Tab for EditorTab {
                     artist_col = artist_col.push(txt);
                 }
             }
+            sp_col = sp_col
+                .push(
+                    container(
+                        row(vec![artist.into(), add_artist_button, remove_artist_button])
+                            .spacing(10),
+                    )
+                    .align_y(alignment::Vertical::Bottom),
+                )
+                .push(artist_col);
 
-            let album_header = Text::new("Albums").into();
+            let album_header = Text::new("Albums");
             let add_album_button = Button::new("Add Album")
                 .on_press(Msg::Editor(EditorMessage::AddAlbumButton))
                 .into();
@@ -252,8 +288,21 @@ impl Tab for EditorTab {
                     album_col = album_col.push(text_input);
                 }
             }
+            sp_col = sp_col
+                .push(
+                    container(
+                        row(vec![
+                            album_header.into(),
+                            add_album_button,
+                            remove_album_button,
+                        ])
+                        .spacing(10),
+                    )
+                    .align_y(alignment::Vertical::Bottom),
+                )
+                .push(album_col);
 
-            let genre_header = Text::new("Genre").into();
+            let genre_header = Text::new("Genre");
             let add_genre_button = Button::new("Add Genre")
                 .on_press(Msg::Editor(EditorMessage::AddGenreButton))
                 .into();
@@ -269,37 +318,25 @@ impl Tab for EditorTab {
                     genre_col = genre_col.push(text_input);
                 }
             }
+            sp_col = sp_col
+                .push(
+                    container(
+                        row(vec![
+                            genre_header.into(),
+                            add_genre_button,
+                            remove_genre_button,
+                        ])
+                        .spacing(10),
+                    )
+                    .align_y(alignment::Vertical::Bottom),
+                )
+                .push(genre_col);
 
             let submit_button =
                 Button::new("Submit").on_press(Msg::Editor(EditorMessage::SubmitChanges()));
+            sp_col = sp_col.push(submit_button);
 
-            scrollable(
-                column(vec![
-                    title,
-                    title_input,
-                    container(
-                        row(vec![artist, add_artist_button, remove_artist_button]).spacing(10),
-                    )
-                    .align_y(alignment::Vertical::Bottom)
-                    .into(),
-                    artist_col.into(),
-                    container(
-                        row(vec![album_header, add_album_button, remove_album_button]).spacing(10),
-                    )
-                    .align_y(alignment::Vertical::Bottom)
-                    .into(),
-                    album_col.into(),
-                    container(
-                        row(vec![genre_header, add_genre_button, remove_genre_button]).spacing(10),
-                    )
-                    .align_y(alignment::Vertical::Bottom)
-                    .into(),
-                    genre_col.into(),
-                    submit_button.into(),
-                ])
-                .spacing(10),
-            )
-            .into()
+            scrollable(sp_col).into()
         } else {
             text("select a song!").into()
         };
@@ -360,8 +397,26 @@ impl Tab for EditorTab {
             }
             EditorMessage::DividerResize(size) => self.hor_divider_pos = Some(size),
             EditorMessage::SongButton(song) => {
-                self.current_app_song = Some(song);
+                self.current_app_song = Some(song.clone());
+                self.current_app_song_image = None;
                 self.reset_input_fields();
+                if let Some(path) = song.path.clone() {
+                    return Command::perform(
+                        async {
+                            match tags::read_picture(path).await {
+                                Ok(pic) => pic,
+                                Err(e) => {
+                                    error!("{e}");
+                                    vec![]
+                                }
+                            }
+                        },
+                        |res| Msg::Editor(EditorMessage::LoadSongImage(res)),
+                    );
+                }
+            }
+            EditorMessage::LoadSongImage(pic) => {
+                self.current_app_song_image = Some(pic);
             }
             EditorMessage::ReloadButton => {
                 let db_action = self.db.clone();

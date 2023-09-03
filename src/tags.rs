@@ -324,11 +324,42 @@ pub async fn read_tags_to_gui_song(path: PathBuf) -> Result<Song> {
                 .set_genres(genres);
             if let Some(id) = tag.get_string(&ItemKey::Unknown("DBID".to_string())) {
                 song.set_id(id.parse::<i32>().expect("no fail"));
-            }
-                // TODO: handle artists and albums and genres and custom tags
-;
+            };
 
             Ok(song)
+        }
+        Err(e) => Err(eyre!(e)),
+    }
+}
+pub async fn read_picture(path: PathBuf) -> Result<Vec<u8>> {
+    match Probe::open(path.clone())?.read() {
+        Ok(mut tagged_file) => {
+            let tag = match tagged_file.primary_tag_mut() {
+                Some(primary_tag) => primary_tag,
+                None => {
+                    if let Some(first_tag) = tagged_file.first_tag_mut() {
+                        first_tag
+                    } else {
+                        let tag_type = tagged_file.primary_tag_type();
+
+                        println!("no tags found, creating new tags of type {:?}", tag_type);
+                        tagged_file.insert_tag(Tag::new(tag_type));
+                        tagged_file.primary_tag_mut().unwrap()
+                    }
+                }
+            };
+
+            if tag.picture_count() > 0 {
+                let pic = tag
+                    .pictures()
+                    .first()
+                    .expect("picture exists")
+                    .clone()
+                    .into_data();
+                Ok(pic)
+            } else {
+                Err(eyre!("No picture found!"))
+            }
         }
         Err(e) => Err(eyre!(e)),
     }
