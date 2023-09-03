@@ -1,8 +1,12 @@
 [package]
-name = "muzik_tui"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
+name = "muzik_cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "muzik-cli"
+path = "src/main.rs"
 
 [dependencies]
 muzik_common = { path = "../muzik_common" }
