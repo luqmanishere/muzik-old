@@ -10,8 +10,6 @@ eyre = "0.6"
 youtube_dl = { version = "0.8", default-features = false, features = ["tokio"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
-dialoguer = { version = "0.10", features = ["fuzzy-select", "completion"] }
-sanitize-filename = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
@@ -27,7 +25,6 @@ cursive = { version = "0.20", default-features = false, features = [
     "toml",
 ] }
 cursive-tabs = "^0"
-tempfile = "3"
 tracing-appender = "0.2"
 toml = "0.7"
 serde = { version = "1", features = ["derive"] }
@@ -39,8 +36,5 @@ sea-orm = { version = "^0", features = [
 sea-orm-migration = "^0"
 async-trait = "0.1"
 crossbeam-channel = "0.5"
-iced = { version = "0.10", features = ["tokio", "image", "advanced"] }
-iced_aw = { version = "0.7", features = ["split", "tabs"] }
-iced_native = "0.10"
 walkdir = "2"
 mime_guess = "2"

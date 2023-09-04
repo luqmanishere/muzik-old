@@ -2635,20 +2635,14 @@ dependencies = [
  "async-trait",
  "clap",
  "crossbeam-channel",
- "cursive",
- "cursive-tabs",
  "dialoguer",
  "directories",
  "eyre",
- "iced",
- "iced_aw",
- "iced_native",
  "image",
  "lofty",
  "mime_guess",
  "muzik_common",
  "reqwest",
- "sanitize-filename",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -2656,7 +2650,6 @@ dependencies = [
  "tokio",
  "toml 0.7.6",
  "tracing",
- "tracing-appender",
  "tracing-subscriber",
  "walkdir",
  "youtube_dl",
@@ -2708,22 +2701,16 @@ dependencies = [
  "crossbeam-channel",
  "cursive",
  "cursive-tabs",
- "dialoguer",
  "directories",
  "eyre",
- "iced",
- "iced_aw",
- "iced_native",
  "image",
  "lofty",
  "mime_guess",
  "muzik_common",
  "reqwest",
- "sanitize-filename",
  "sea-orm",
  "sea-orm-migration",
  "serde",
- "tempfile",
  "tokio",
  "toml 0.7.6",
  "tracing",
@@ -3954,16 +3941,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "sanitize-filename"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08c502bdb638f1396509467cb0580ef3b29aa2a45c5d43e5d84928241280296c"
-dependencies = [
- "lazy_static",
- "regex",
 ]
 
 [[package]]
