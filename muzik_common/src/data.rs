@@ -28,8 +28,6 @@ pub struct Song {
     pub path: Option<PathBuf>,
     /// Database id if available
     pub id: Option<i32>,
-    /// ID read from local file
-    local_id: Option<i32>,
     /// Title of the song
     pub title: Option<String>,
     /// List of artists of the song
@@ -127,10 +125,31 @@ impl Song {
 
     /// Returns database id if in database
     pub fn identify(&self) -> String {
-        if self.in_database {
-            format!("Database : {}", self.id.expect("in database have id"))
+        if let Some(path) = self.path.as_ref() {
+            if self.in_database && path.exists() {
+                format!(
+                    "Database : {} | Local Exists",
+                    self.id.expect("in database have id")
+                )
+            } else if self.in_database && !path.exists() {
+                format!(
+                    "Database : {} | Local Not Exists",
+                    self.id.expect("in database have id")
+                )
+            } else if path.exists() {
+                format!("Not in database | Local Exists")
+            } else {
+                format!("Not in database | Local Not Exists")
+            }
         } else {
-            format!("Not in database")
+            if self.in_database {
+                format!(
+                    "Database : {} | Local Not Exists",
+                    self.id.expect("in database have id")
+                )
+            } else {
+                format!("Not in database | Local Not Exists")
+            }
         }
     }
 
@@ -177,6 +196,18 @@ impl Song {
             vec!["Unknown".to_string()]
         }
     }
+
+    pub fn is_database_only(&self) -> bool {
+        if let Some(path) = self.path.as_ref() {
+            if path.exists() {
+                false
+            } else {
+                true
+            }
+        } else {
+            true
+        }
+    }
 }
 
 pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> {
@@ -193,7 +224,7 @@ pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> 
         .map(|e| e.expect("can unwrap path").path().to_owned())
         .collect::<Vec<_>>();
 
-    let (svec, id_present) = {
+    let (mut svec, id_present) = {
         let mut svec = vec![];
         let mut id_present = vec![];
         for file in files {
@@ -209,6 +240,7 @@ pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> 
                 in_database
             );
             if in_database {
+                // TODO: verify correctness against all values in Song model
                 id_present.push(song.id.expect("has id if true in database"));
             }
             song.in_database = in_database;
@@ -216,6 +248,14 @@ pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> 
         }
         (svec, id_present)
     };
+
+    for sonsgs in db
+        .get_remaining_entries(id_present)
+        .await
+        .expect("not fail")
+    {
+        svec.push(sonsgs);
+    }
 
     svec
 }

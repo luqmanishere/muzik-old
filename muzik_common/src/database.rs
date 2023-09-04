@@ -329,11 +329,9 @@ pub struct DbConnection {
 
 use crate::{
     data::Song as GSong,
-    entities::{artist::ArtistModel, prelude::*, *},
+    entities::{prelude::*, *},
 };
-use sea_orm::{
-    prelude::*, sea_query::extension::postgres, ActiveValue, ConnectOptions, QuerySelect,
-};
+use sea_orm::{prelude::*, ActiveValue, ConnectOptions, QuerySelect};
 use sea_orm_migration::prelude::*;
 
 impl DbConnection {
@@ -591,7 +589,7 @@ impl DbConnection {
             .last_insert_id)
     }
 
-    pub async fn get_all_songs_gui(&self, music_dir: PathBuf) -> Vec<GSong> {
+    pub async fn get_all_songs_gui(&self, _music_dir: PathBuf) -> Vec<GSong> {
         let songs = song::Entity::find()
             .all(self.ref_db())
             .await
@@ -813,6 +811,97 @@ impl DbConnection {
             .collect::<Vec<String>>())
     }
 
+    pub async fn get_remaining_entries(&self, present: Vec<i32>) -> Result<Vec<GSong>> {
+        let songs = SongEntity::find().all(self.ref_db()).await?;
+
+        let diff: Vec<_> = songs
+            .into_iter()
+            .filter(|item| !present.contains(&item.id))
+            .collect();
+
+        let mut vvec = vec![];
+        for s in diff {
+            let mut new_song = GSong::new()
+                .set_path(PathBuf::from(s.path.unwrap_or_default()))
+                .set_id(s.id)
+                .set_youtube_id(s.youtube_id.unwrap_or_default())
+                .set_thumbnail_url(s.thumbnail_url.unwrap_or_default())
+                .set_title(s.title);
+
+            let artists = {
+                let mut a_vec = vec![];
+                for (_sa, mut artists) in song::Entity::find()
+                    .find_with_related(Artist)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    artists.sort_by_key(|s1| s1.id);
+                    for artist in artists {
+                        a_vec.push(artist);
+                    }
+                }
+                a_vec
+            };
+            new_song.set_artists(artists);
+
+            let albums = {
+                let mut albums_v = vec![];
+                for (_, albums) in song::Entity::find()
+                    .find_with_related(Album)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for album in albums {
+                        albums_v.push(album);
+                    }
+                }
+                albums_v
+            };
+            new_song.set_albums(albums);
+
+            let genres = {
+                let mut genres_v = vec![];
+                for (_, genres) in song::Entity::find()
+                    .find_with_related(Genre)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for genre in genres {
+                        genres_v.push(genre);
+                    }
+                }
+                genres_v
+            };
+            new_song.set_genres(genres);
+
+            let youtube_playlist_ids = {
+                let mut yt_p_id = vec![];
+                for (_, youtube_playlist_id_model) in song::Entity::find()
+                    .find_with_related(YoutubePlaylistId)
+                    .filter(song::Column::Id.eq(s.id))
+                    .all(self.ref_db())
+                    .await
+                    .unwrap_or(vec![])
+                {
+                    for youtube_playlist_id in youtube_playlist_id_model {
+                        yt_p_id.push(youtube_playlist_id);
+                    }
+                }
+                yt_p_id
+            };
+            new_song.set_youtube_playlists(youtube_playlist_ids);
+            new_song.in_database = true;
+            vvec.push(new_song);
+        }
+        Ok(vvec)
+    }
+
     pub async fn check_song_in_database(&self, song: &GSong) -> bool {
         // check if id exists
         if let Some(db_id) = song.id {
@@ -907,7 +996,7 @@ impl DbConnection {
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
     ) -> Result<i32> {
-        let model = song::ActiveModel {
+        let _model = song::ActiveModel {
             id: ActiveValue::Set(song_id),
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
@@ -917,7 +1006,7 @@ impl DbConnection {
         };
         todo!("implement updating the path value");
 
-        Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
+        // Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
     }
 
     pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<()> {

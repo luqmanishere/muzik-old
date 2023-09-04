@@ -27,8 +27,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub enum EditorMessage {
     ReloadButton,
-    LoadedDbSongs(Vec<Song>),
-    LoadedLocalSongs(Vec<Song>),
+    LoadSongs(Vec<Song>),
     DbVisibleToggle(bool),
     DividerResize(u16),
     SongButton(Song),
@@ -56,10 +55,8 @@ pub enum EditorMessage {
 pub struct EditorTab {
     config: Config,
     db: Arc<DbConnection>,
-    db_songs_vec: Option<Vec<Song>>,
     db_songs_visibility: bool,
-    local_songs_vec: Option<Vec<Song>>,
-    displayed_songs_vec: Option<Vec<Song>>,
+    songs_vec: Option<Vec<Song>>,
     hor_divider_pos: Option<u16>,
 
     current_app_song: Option<Song>,
@@ -72,26 +69,6 @@ pub struct EditorTab {
 }
 
 impl EditorTab {
-    pub fn new(config: Config, db: Arc<DbConnection>) -> Self {
-        Self {
-            config,
-            db,
-            db_songs_vec: None,
-            db_songs_visibility: false,
-            local_songs_vec: None,
-            displayed_songs_vec: None,
-            hor_divider_pos: None,
-
-            current_app_song: None,
-            current_app_song_image: None,
-
-            title_text_input: None,
-            artist_text_input: None,
-            album_text_input: None,
-            genre_text_input: None,
-        }
-    }
-
     pub fn new_with_command(config: Config, db: Arc<DbConnection>) -> (Self, Command<Msg>) {
         let music_dir = config.get_music_dir();
         let db_conn = db.clone();
@@ -99,10 +76,8 @@ impl EditorTab {
             Self {
                 config,
                 db,
-                db_songs_vec: None,
                 db_songs_visibility: false,
-                local_songs_vec: None,
-                displayed_songs_vec: None,
+                songs_vec: None,
                 hor_divider_pos: None,
 
                 current_app_song: None,
@@ -114,7 +89,7 @@ impl EditorTab {
                 genre_text_input: None,
             },
             Command::perform(async { load_songs(music_dir, db_conn).await }, |result| {
-                Msg::Editor(EditorMessage::LoadedLocalSongs(result))
+                Msg::Editor(EditorMessage::LoadSongs(result))
             }),
         )
     }
@@ -197,9 +172,21 @@ impl Tab for EditorTab {
         let songs: Element<_> = {
             let mut songs = vec![];
 
-            if let Some(local_songs) = self.local_songs_vec.as_ref() {
-                for item in local_songs.iter().map(|msongs| msongs.view()) {
-                    songs.push(item);
+            if let Some(local_songs) = self.songs_vec.as_ref() {
+                if self.db_songs_visibility {
+                    for item in local_songs.into_iter().map(|msongs| msongs.view()) {
+                        songs.push(item);
+                    }
+                } else {
+                    for item in local_songs.into_iter().filter_map(|msongs| {
+                        if msongs.is_database_only() {
+                            None
+                        } else {
+                            Some(msongs.view())
+                        }
+                    }) {
+                        songs.push(item);
+                    }
                 }
             }
 
@@ -368,26 +355,8 @@ impl Tab for EditorTab {
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::ReturnMessage> {
         match message {
-            // todo: load local and database in the same function
-            EditorMessage::LoadedDbSongs(result_db_songs_vec) => {
-                if !result_db_songs_vec.is_empty() {
-                    self.db_songs_vec = Some(result_db_songs_vec);
-                } else {
-                    self.db_songs_vec = None;
-                }
-            }
-            EditorMessage::LoadedLocalSongs(songs) => self.local_songs_vec = Some(songs),
-            EditorMessage::DbVisibleToggle(b) => {
-                self.db_songs_visibility = b;
-                if self.db_songs_vec.is_none() {
-                    let db_action = self.db.clone();
-                    let music_dir = self.config.get_music_dir();
-                    return Command::perform(
-                        async move { db_action.get_all_songs_gui(music_dir).await },
-                        |result| Self::ReturnMessage::Editor(EditorMessage::LoadedDbSongs(result)),
-                    );
-                }
-            }
+            EditorMessage::LoadSongs(songs) => self.songs_vec = Some(songs),
+            EditorMessage::DbVisibleToggle(b) => self.db_songs_visibility = b,
             EditorMessage::DividerResize(size) => self.hor_divider_pos = Some(size),
             EditorMessage::SongButton(song) => {
                 self.current_app_song = Some(song.clone());
@@ -412,22 +381,12 @@ impl Tab for EditorTab {
                 self.current_app_song_image = Some(pic);
             }
             EditorMessage::ReloadButton => {
-                let db_action = self.db.clone();
                 let db_action2 = self.db.clone();
-                let music_dir1 = self.config.get_music_dir();
                 let music_dir2 = self.config.get_music_dir();
-                return Command::batch(vec![
-                    Command::perform(
-                        async move { db_action.get_all_songs_gui(music_dir1).await },
-                        |result| Self::ReturnMessage::Editor(EditorMessage::LoadedDbSongs(result)),
-                    ),
-                    Command::perform(
-                        async { load_songs(music_dir2, db_action2).await },
-                        |result| {
-                            Self::ReturnMessage::Editor(EditorMessage::LoadedLocalSongs(result))
-                        },
-                    ),
-                ]);
+                return Command::batch(vec![Command::perform(
+                    async { load_songs(music_dir2, db_action2).await },
+                    |result| Self::ReturnMessage::Editor(EditorMessage::LoadSongs(result)),
+                )]);
             }
             EditorMessage::TitleTextInput(input) => self.title_text_input = Some(input),
             EditorMessage::ArtistTextInput((id, val)) => {
@@ -481,6 +440,7 @@ impl Tab for EditorTab {
                     match current_song.id {
                         Some(_id) => {
                             // is in database
+                            // TODO: update song based on given inputs
                         }
                         None => {
                             // is not in a database
@@ -534,7 +494,7 @@ impl Tab for EditorTab {
                                 },
                                 |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
                             );
-                        } //todo: update if update is needed, add to database if needed
+                        }
                     }
                 }
             }
@@ -575,6 +535,7 @@ trait Disp {
 
 impl Disp for Song {
     type Message = Msg;
+
     fn view(&self) -> Element<Self::Message> {
         // TODO: display picture
         let t = format!(
