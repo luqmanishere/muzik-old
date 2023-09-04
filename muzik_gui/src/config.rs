@@ -27,7 +27,6 @@ impl ReadConfig {
             if let Some(path) = path {
                 path
             } else {
-                
                 strategy.config_dir().join("config.toml")
             }
         };

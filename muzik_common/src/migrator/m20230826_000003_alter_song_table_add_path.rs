@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use super::m20230601_000001_create_basic_table::{Song};
+use super::m20230601_000001_create_basic_table::Song;
 
 pub struct Migration;
 
