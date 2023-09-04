@@ -7,9 +7,10 @@ use cursive::{
 };
 use eyre::{Context, Result};
 use muzik_common::{
+    database::AppSong,
     entities::*,
     tags,
-    util::{download_from_youtube, search_youtube, search_youtube_playlist}, database::AppSong,
+    util::{download_from_youtube, search_youtube, search_youtube_playlist},
 };
 use tracing::{debug, error, info, instrument, warn};
 use youtube_dl::SingleVideo;
@@ -75,7 +76,8 @@ impl EventRunner {
                     .unwrap();
                 self.notify_ui(format!("Done searching for: {}", kw));
             }
-            Err(e) => return Err(e.wrap_err("error while searching youtube")),
+            // Err(e) => return Err(e.wrap_err("error while searching youtube")),
+            Err(e) => return Err(eyre::eyre!({ e })),
         }
         Ok(EventLoopAction::Continue)
     }

@@ -1,6 +1,5 @@
 use std::{io::Cursor, path::PathBuf};
 
-use eyre::{eyre, Result};
 use lofty::{Accessor, ItemKey, ItemValue, Picture, Probe, Tag, TagExt, TagItem, TaggedFileExt};
 use tracing::error;
 
@@ -10,11 +9,13 @@ use crate::{
     entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
 };
 
-pub async fn write_tags_async(path: PathBuf, song: &AppSong) -> Result<()> {
+use self::error::TagError;
+
+pub async fn write_tags_async(path: PathBuf, song: &AppSong) -> Result<(), TagError> {
     write_tags(path, song).await
 }
 
-pub async fn write_tags(path: PathBuf, song: &AppSong) -> Result<()> {
+pub async fn write_tags(path: PathBuf, song: &AppSong) -> Result<(), TagError> {
     match Probe::open(path.clone())?.read() {
         Ok(mut tagged_file) => {
             let tag = match tagged_file.primary_tag_mut() {
@@ -139,11 +140,11 @@ pub async fn write_tags(path: PathBuf, song: &AppSong) -> Result<()> {
             tag.save_to_path(path)?;
             Ok(())
         }
-        Err(e) => Err(eyre!(e)),
+        Err(e) => Err(TagError::LoftyError(e)),
     }
 }
 
-pub async fn write_tags_song(path: PathBuf, song: &Song) -> Result<()> {
+pub async fn write_tags_song(path: PathBuf, song: &Song) -> Result<(), TagError> {
     match Probe::open(path.clone())?.read() {
         Ok(mut tagged_file) => {
             let tag = match tagged_file.primary_tag_mut() {
@@ -266,11 +267,11 @@ pub async fn write_tags_song(path: PathBuf, song: &Song) -> Result<()> {
             tag.save_to_path(path)?;
             Ok(())
         }
-        Err(e) => Err(eyre!(e)),
+        Err(e) => Err(TagError::LoftyError(e)),
     }
 }
 /// Reads the tags from the given path into an `AppSong`
-pub async fn read_tags_to_gui_song(path: PathBuf) -> Result<Song> {
+pub async fn read_tags_to_gui_song(path: PathBuf) -> Result<Song, TagError> {
     match Probe::open(path.clone())?.read() {
         Ok(mut tagged_file) => {
             let tag = match tagged_file.primary_tag_mut() {
@@ -323,10 +324,10 @@ pub async fn read_tags_to_gui_song(path: PathBuf) -> Result<Song> {
 
             Ok(song)
         }
-        Err(e) => Err(eyre!(e)),
+        Err(e) => Err(TagError::LoftyError(e)),
     }
 }
-pub async fn read_picture(path: PathBuf) -> Result<Vec<u8>> {
+pub async fn read_picture(path: PathBuf) -> Result<Vec<u8>, TagError> {
     match Probe::open(path.clone())?.read() {
         Ok(mut tagged_file) => {
             let tag = match tagged_file.primary_tag_mut() {
@@ -353,9 +354,28 @@ pub async fn read_picture(path: PathBuf) -> Result<Vec<u8>> {
                     .into_data();
                 Ok(pic)
             } else {
-                Err(eyre!("No picture found!"))
+                Err(TagError::NoPictureFound)
             }
         }
-        Err(e) => Err(eyre!(e)),
+        Err(e) => Err(TagError::LoftyError(e)),
+    }
+}
+
+pub mod error {
+    use miette::Diagnostic;
+    use thiserror::Error;
+
+    #[derive(Error, Diagnostic, Debug)]
+    pub enum TagError {
+        #[error(transparent)]
+        IoError(#[from] std::io::Error),
+        #[error(transparent)]
+        LoftyError(#[from] lofty::LoftyError),
+        #[error("No picture found for this file")]
+        NoPictureFound,
+        #[error(transparent)]
+        ReqwestError(#[from] reqwest::Error),
+        #[error(transparent)]
+        ImageError(#[from] image::ImageError),
     }
 }

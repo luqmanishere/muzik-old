@@ -2659,7 +2659,6 @@ dependencies = [
 name = "muzik_common"
 version = "0.1.0"
 dependencies = [
- "eyre",
  "image",
  "lofty",
  "miette",
@@ -2667,6 +2666,7 @@ dependencies = [
  "reqwest",
  "sea-orm",
  "sea-orm-migration",
+ "thiserror",
  "tokio",
  "tracing",
  "walkdir",

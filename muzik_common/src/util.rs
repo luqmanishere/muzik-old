@@ -1,9 +1,13 @@
-use eyre::{eyre, Result};
 use youtube_dl::{SearchOptions, SingleVideo, YoutubeDl, YoutubeDlOutput};
 
 use std::path::PathBuf;
 
-pub fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<SingleVideo>> {
+use self::error::YoutubeError;
+
+pub fn search_youtube(
+    kw: String,
+    cookies: Option<PathBuf>,
+) -> Result<Vec<SingleVideo>, YoutubeError> {
     let yt_search = if !kw.contains("http") {
         let search_options = SearchOptions::youtube(kw).with_count(5);
         if let Some(cookie) = cookies {
@@ -30,23 +34,14 @@ pub fn search_youtube(kw: String, cookies: Option<PathBuf>) -> Result<Vec<Single
             }
             youtube_dl::YoutubeDlOutput::SingleVideo(video) => Ok(vec![*video]),
         },
-        Err(err) => match err {
-            youtube_dl::Error::Io(e) => Err(eyre!("error during I/O: {}", e)),
-            youtube_dl::Error::Json(e) => Err(eyre!("error parsing JSON: {}", e)),
-            youtube_dl::Error::ExitCode { code, stderr } => Err(eyre!(
-                "process returned code: {}, with stderr: {}",
-                code,
-                stderr
-            )),
-            youtube_dl::Error::ProcessTimeout => Err(eyre!("process timed out")),
-        },
+        Err(err) => Err(YoutubeError::YoutubeDl(err)),
     }
 }
 
 pub fn search_youtube_playlist(
     playlist_id: String,
     cookies: Option<PathBuf>,
-) -> Result<Vec<SingleVideo>> {
+) -> Result<Vec<SingleVideo>, YoutubeError> {
     let yt_search = {
         let link = format!("https://www.youtube.com/playlist?list={}", playlist_id);
         if let Some(cookie) = cookies {
@@ -67,16 +62,7 @@ pub fn search_youtube_playlist(
             }
             youtube_dl::YoutubeDlOutput::SingleVideo(video) => Ok(vec![*video]),
         },
-        Err(err) => match err {
-            youtube_dl::Error::Io(e) => Err(eyre!("error during I/O: {}", e)),
-            youtube_dl::Error::Json(e) => Err(eyre!("error parsing JSON: {}", e)),
-            youtube_dl::Error::ExitCode { code, stderr } => Err(eyre!(
-                "process returned code: {}, with stderr: {}",
-                code,
-                stderr
-            )),
-            youtube_dl::Error::ProcessTimeout => Err(eyre!("process timed out")),
-        },
+        Err(err) => Err(YoutubeError::YoutubeDl(err)),
     }
 }
 
@@ -114,5 +100,16 @@ pub fn download_from_youtube(
             .download(true)
             .extract_audio(true)
             .run()
+    }
+}
+
+pub mod error {
+    use miette::Diagnostic;
+    use thiserror::Error;
+
+    #[derive(Error, Diagnostic, Debug)]
+    pub enum YoutubeError {
+        #[error(transparent)]
+        YoutubeDl(#[from] youtube_dl::Error),
     }
 }

@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use eyre::{eyre, Result};
-use miette::{IntoDiagnostic, Result as MResult};
 use sea_orm_migration::SchemaManager;
 use tracing::{debug, info, warn};
 
@@ -334,6 +332,8 @@ use crate::{
 use sea_orm::{prelude::*, ActiveValue, ConnectOptions, QuerySelect};
 use sea_orm_migration::prelude::*;
 
+use self::error::DatabaseError;
+
 impl DbConnection {
     pub fn default() -> Self {
         Self {
@@ -341,7 +341,7 @@ impl DbConnection {
             db: None,
         }
     }
-    pub async fn new(path: PathBuf) -> Result<Self> {
+    pub async fn new(path: PathBuf) -> Result<Self, DatabaseError> {
         let db_path = format!("sqlite:{}?mode=rwc", path.display());
         let mut opt = ConnectOptions::new(db_path);
         opt.sqlx_logging(true)
@@ -359,19 +359,17 @@ impl DbConnection {
         })
     }
 
-    pub async fn m_new(path: PathBuf) -> MResult<Self> {
+    pub async fn m_new(path: PathBuf) -> Result<Self, DatabaseError> {
         let db_path = format!("sqlite:{}?mode=rwc", path.display());
         let mut opt = ConnectOptions::new(db_path);
         opt.sqlx_logging(true)
             .sqlx_logging_level(tracing::log::LevelFilter::Trace);
-        let db = sea_orm::Database::connect(opt).await.into_diagnostic()?;
+        let db = sea_orm::Database::connect(opt).await?;
 
         let _schema_manager = SchemaManager::new(&db);
 
         // ensure up to date
-        crate::migrator::Migrator::up(&db, None)
-            .await
-            .into_diagnostic()?;
+        crate::migrator::Migrator::up(&db, None).await?;
 
         Ok(Self {
             path: Some(path),
@@ -397,7 +395,7 @@ impl DbConnection {
 
     /// insert an entry into the `artist` table
     #[tracing::instrument(skip(self))]
-    pub async fn insert_artist(&self, artist: String) -> Result<i32> {
+    pub async fn insert_artist(&self, artist: String) -> Result<i32, DatabaseError> {
         let artist_model = Artist::find()
             .filter(artist::Column::Name.eq(artist.clone()))
             .one(self.ref_db())
@@ -418,7 +416,11 @@ impl DbConnection {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn insert_song_artist(&self, artist_id: i32, song_id: i32) -> Result<i32> {
+    pub async fn insert_song_artist(
+        &self,
+        artist_id: i32,
+        song_id: i32,
+    ) -> Result<i32, DatabaseError> {
         let model = song_artist_junction::ActiveModel {
             song_id: ActiveValue::Set(song_id),
             artist_id: ActiveValue::Set(artist_id),
@@ -432,7 +434,7 @@ impl DbConnection {
 
     /// insert an entry into the `album` table
     #[tracing::instrument(skip(self))]
-    pub async fn insert_album(&self, album: String) -> Result<i32> {
+    pub async fn insert_album(&self, album: String) -> Result<i32, DatabaseError> {
         let album_model = Album::find()
             .filter(album::Column::Name.eq(album.clone()))
             .one(self.ref_db())
@@ -453,7 +455,11 @@ impl DbConnection {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn insert_song_album(&self, album_id: i32, song_id: i32) -> Result<i32> {
+    pub async fn insert_song_album(
+        &self,
+        album_id: i32,
+        song_id: i32,
+    ) -> Result<i32, DatabaseError> {
         let model = song_album_junction::ActiveModel {
             song_id: ActiveValue::Set(song_id),
             album_id: ActiveValue::Set(album_id),
@@ -466,7 +472,7 @@ impl DbConnection {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn insert_genre(&self, genre: String) -> Result<i32> {
+    pub async fn insert_genre(&self, genre: String) -> Result<i32, DatabaseError> {
         let genre_model = Genre::find()
             .filter(genre::Column::Genre.eq(genre.clone()))
             .one(self.ref_db())
@@ -487,7 +493,11 @@ impl DbConnection {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn insert_song_genre(&self, genre_id: i32, song_id: i32) -> Result<i32> {
+    pub async fn insert_song_genre(
+        &self,
+        genre_id: i32,
+        song_id: i32,
+    ) -> Result<i32, DatabaseError> {
         let model = song_genre_junction::ActiveModel {
             song_id: ActiveValue::Set(song_id),
             genre_id: ActiveValue::Set(genre_id),
@@ -501,7 +511,10 @@ impl DbConnection {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn insert_youtube_playlist_id(&self, youtube_playlist_id: String) -> Result<i32> {
+    pub async fn insert_youtube_playlist_id(
+        &self,
+        youtube_playlist_id: String,
+    ) -> Result<i32, DatabaseError> {
         let youtube_playlist_id_model = YoutubePlaylistId::find()
             .filter(youtube_playlist_id::Column::YoutubePlaylistId.eq(youtube_playlist_id.clone()))
             .one(self.ref_db())
@@ -528,7 +541,7 @@ impl DbConnection {
         &self,
         youtube_playlist_id_id: i32,
         song_id: i32,
-    ) -> Result<i32> {
+    ) -> Result<i32, DatabaseError> {
         let model = song_youtube_playlist_id_junction::ActiveModel {
             song_id: ActiveValue::Set(song_id),
             youtube_playlist_id_id: ActiveValue::Set(youtube_playlist_id_id),
@@ -547,7 +560,7 @@ impl DbConnection {
         title: String,
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
-    ) -> Result<i32> {
+    ) -> Result<i32, DatabaseError> {
         let model = song::ActiveModel {
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
@@ -567,7 +580,7 @@ impl DbConnection {
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
         path: Option<PathBuf>,
-    ) -> Result<i32> {
+    ) -> Result<i32, DatabaseError> {
         let model = song::ActiveModel {
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
@@ -740,7 +753,7 @@ impl DbConnection {
         }
         vvec
     }
-    pub async fn get_all_songs(&self, music_dir: PathBuf) -> Result<Vec<AppSong>> {
+    pub async fn get_all_songs(&self, music_dir: PathBuf) -> Result<Vec<AppSong>, DatabaseError> {
         let songs = song::Entity::find().all(self.ref_db()).await?;
         let mut vvec = vec![];
         for s in songs {
@@ -798,7 +811,7 @@ impl DbConnection {
         Ok(vvec)
     }
 
-    pub async fn get_all_artists(&self) -> Result<Vec<String>> {
+    pub async fn get_all_artists(&self) -> Result<Vec<String>, DatabaseError> {
         let artists_vec = Artist::find()
             .select_only()
             .column(artist::Column::Name)
@@ -811,7 +824,10 @@ impl DbConnection {
             .collect::<Vec<String>>())
     }
 
-    pub async fn get_remaining_entries(&self, present: Vec<i32>) -> Result<Vec<GSong>> {
+    pub async fn get_remaining_entries(
+        &self,
+        present: Vec<i32>,
+    ) -> Result<Vec<GSong>, DatabaseError> {
         let songs = SongEntity::find().all(self.ref_db()).await?;
 
         let diff: Vec<_> = songs
@@ -933,7 +949,7 @@ impl DbConnection {
         }
     }
 
-    pub async fn insert_from_gui_song(&self, mut song: GSong) -> Result<GSong> {
+    pub async fn insert_from_gui_song(&self, mut song: GSong) -> Result<GSong, DatabaseError> {
         let title = song.get_title_string();
         let youtube_id = song.youtube_id.clone();
         let thumbnail_url = song.thumbnail_url.clone();
@@ -962,7 +978,7 @@ impl DbConnection {
 
         Ok(song.set_id(song_id))
     }
-    pub async fn insert_from_app_song(&self, song: AppSong) -> Result<()> {
+    pub async fn insert_from_app_song(&self, song: AppSong) -> Result<(), DatabaseError> {
         let title = song.get_title_string();
         let youtube_id = song.yt_id;
         let thumbnail_url = song.tb_url;
@@ -995,7 +1011,7 @@ impl DbConnection {
         title: String,
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
-    ) -> Result<i32> {
+    ) -> Result<i32, DatabaseError> {
         let _model = song::ActiveModel {
             id: ActiveValue::Set(song_id),
             title: ActiveValue::Set(title),
@@ -1009,7 +1025,7 @@ impl DbConnection {
         // Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
     }
 
-    pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<()> {
+    pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<(), DatabaseError> {
         self.update_song(
             song.id.unwrap(),
             song.get_title_string(),
@@ -1021,7 +1037,7 @@ impl DbConnection {
         Ok(())
     }
 
-    pub async fn delete_song_from_app_song(&self, song: AppSong) -> Result<u64> {
+    pub async fn delete_song_from_app_song(&self, song: AppSong) -> Result<u64, DatabaseError> {
         if let Some(song_id) = song.id {
             // delete all foreign keys
             SongArtistJunction::delete_many()
@@ -1041,11 +1057,11 @@ impl DbConnection {
                 .await?
                 .rows_affected)
         } else {
-            Err(eyre!("No song id"))
+            Err(DatabaseError::NoSongId)
         }
     }
 
-    pub async fn delete_song_artist(&self, artist_id: i32) -> Result<()> {
+    pub async fn delete_song_artist(&self, artist_id: i32) -> Result<(), DatabaseError> {
         let model = SongArtistJunction::find()
             .filter(song_artist_junction::Column::ArtistId.eq(artist_id))
             .one(self.ref_db())
@@ -1055,7 +1071,7 @@ impl DbConnection {
         Ok(())
     }
 
-    pub async fn delete_song_album(&self, album_id: i32) -> Result<()> {
+    pub async fn delete_song_album(&self, album_id: i32) -> Result<(), DatabaseError> {
         let model = SongAlbumJunction::find()
             .filter(song_album_junction::Column::AlbumId.eq(album_id))
             .one(self.ref_db())
@@ -1065,7 +1081,7 @@ impl DbConnection {
         Ok(())
     }
 
-    pub async fn in_memory_test() -> Result<()> {
+    pub async fn in_memory_test() -> Result<(), DatabaseError> {
         let mut opt = ConnectOptions::new("sqlite::memory:".to_owned());
         opt.sqlx_logging(true)
             .sqlx_logging_level(tracing::log::LevelFilter::Debug);
@@ -1080,7 +1096,7 @@ impl DbConnection {
         Ok(())
     }
 
-    pub async fn test_db(&self) -> Result<()> {
+    pub async fn test_db(&self) -> Result<(), DatabaseError> {
         // ensure database is up to date
         crate::migrator::Migrator::refresh(self.ref_db()).await?;
 
@@ -1179,6 +1195,19 @@ impl DbConnection {
         dbg!(vvec);
 
         Ok(())
+    }
+}
+
+pub mod error {
+    use miette::Diagnostic;
+    use thiserror::Error;
+
+    #[derive(Error, Diagnostic, Debug)]
+    pub enum DatabaseError {
+        #[error(transparent)]
+        SeaOrm(#[from] sea_orm::DbErr),
+        #[error("No song id was given")]
+        NoSongId,
     }
 }
 
