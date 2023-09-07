@@ -41,6 +41,7 @@ fn main() -> Result<()> {
             ..Default::default()
         },
         flags: config,
+        // default_font: Font::MONOSPACE,
         ..Default::default()
     })
     .into_diagnostic()

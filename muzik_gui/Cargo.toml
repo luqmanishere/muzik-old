@@ -26,3 +26,4 @@ iced_native = "0.10"
 image = { version = "^0" }
 serde = { version = "1", features = ["derive"] }
 toml = { version = "0.7" }
+cosmic-text = { git = "https://github.com/pop-os/cosmic-text" }

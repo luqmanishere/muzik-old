@@ -318,6 +318,11 @@ pub async fn read_tags_to_gui_song(path: PathBuf) -> Result<Song, TagError> {
                 .set_artists(artists)
                 .set_albums(albums)
                 .set_genres(genres);
+
+            if let Some(youtube_id) = tag.get_string(&ItemKey::Unknown("YTID".to_string())) {
+                song.set_youtube_id(youtube_id.to_string());
+                song.set_source(crate::data::Source::Youtube);
+            }
             if let Some(id) = tag.get_string(&ItemKey::Unknown("DBID".to_string())) {
                 song.set_id(id.parse::<i32>().expect("no fail"));
             };

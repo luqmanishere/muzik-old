@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use sea_orm_migration::SchemaManager;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 #[derive(Clone, Debug)]
 pub struct AppSong {
@@ -326,8 +326,15 @@ pub struct DbConnection {
 }
 
 use crate::{
-    data::Song as GSong,
-    entities::{prelude::*, *},
+    data::{Song as GSong, Source},
+    entities::{
+        album::AlbumModel,
+        artist::{ArtistModel},
+        genre::GenreModel,
+        prelude::*,
+        song::SongModel,
+        *,
+    },
 };
 use sea_orm::{prelude::*, ActiveValue, ConnectOptions, QuerySelect};
 use sea_orm_migration::prelude::*;
@@ -579,20 +586,14 @@ impl DbConnection {
         title: String,
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
-        path: Option<PathBuf>,
+        path: Option<String>,
     ) -> Result<i32, DatabaseError> {
         let model = song::ActiveModel {
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
             thumbnail_url: ActiveValue::Set(thumbnail_url),
             // should only be the filename to ensure crossplatform
-            path: ActiveValue::Set(path.map(|s| {
-                s.file_name()
-                    .expect("filename")
-                    .to_str()
-                    .expect("managed to convert to string")
-                    .to_string()
-            })),
+            path: ActiveValue::Set(path),
             ..Default::default()
         };
 
@@ -602,7 +603,7 @@ impl DbConnection {
             .last_insert_id)
     }
 
-    pub async fn get_all_songs_gui(&self, _music_dir: PathBuf) -> Vec<GSong> {
+    pub async fn get_all_songs_gui(&self, music_dir: PathBuf) -> Vec<GSong> {
         let songs = song::Entity::find()
             .all(self.ref_db())
             .await
@@ -610,7 +611,9 @@ impl DbConnection {
         let mut vvec = vec![];
         for s in songs {
             let mut new_song = GSong::new()
-                .set_path(PathBuf::from(s.path.unwrap_or_default()))
+                .set_path(PathBuf::from(
+                    music_dir.join(s.path.expect("must have partial path")),
+                ))
                 .set_id(s.id)
                 .set_youtube_id(s.youtube_id.unwrap_or_default())
                 .set_thumbnail_url(s.thumbnail_url.unwrap_or_default())
@@ -837,12 +840,36 @@ impl DbConnection {
 
         let mut vvec = vec![];
         for s in diff {
+            // TODO: wrap this in a function
             let mut new_song = GSong::new()
                 .set_path(PathBuf::from(s.path.unwrap_or_default()))
                 .set_id(s.id)
-                .set_youtube_id(s.youtube_id.unwrap_or_default())
+                // .set_youtube_id(s.youtube_id.unwrap_or_default())
                 .set_thumbnail_url(s.thumbnail_url.unwrap_or_default())
                 .set_title(s.title);
+
+            if let Some(youtube_id) = s.youtube_id {
+                new_song.set_youtube_id(youtube_id);
+                new_song.set_source(Source::Youtube);
+
+                // youtube playlist should only exist if source is youtube
+                let youtube_playlist_ids = {
+                    let mut yt_p_id = vec![];
+                    for (_, youtube_playlist_id_model) in song::Entity::find()
+                        .find_with_related(YoutubePlaylistId)
+                        .filter(song::Column::Id.eq(s.id))
+                        .all(self.ref_db())
+                        .await
+                        .unwrap_or(vec![])
+                    {
+                        for youtube_playlist_id in youtube_playlist_id_model {
+                            yt_p_id.push(youtube_playlist_id);
+                        }
+                    }
+                    yt_p_id
+                };
+                new_song.set_youtube_playlists(youtube_playlist_ids);
+            }
 
             let artists = {
                 let mut a_vec = vec![];
@@ -896,22 +923,6 @@ impl DbConnection {
             };
             new_song.set_genres(genres);
 
-            let youtube_playlist_ids = {
-                let mut yt_p_id = vec![];
-                for (_, youtube_playlist_id_model) in song::Entity::find()
-                    .find_with_related(YoutubePlaylistId)
-                    .filter(song::Column::Id.eq(s.id))
-                    .all(self.ref_db())
-                    .await
-                    .unwrap_or(vec![])
-                {
-                    for youtube_playlist_id in youtube_playlist_id_model {
-                        yt_p_id.push(youtube_playlist_id);
-                    }
-                }
-                yt_p_id
-            };
-            new_song.set_youtube_playlists(youtube_playlist_ids);
             new_song.in_database = true;
             vvec.push(new_song);
         }
@@ -953,9 +964,9 @@ impl DbConnection {
         let title = song.get_title_string();
         let youtube_id = song.youtube_id.clone();
         let thumbnail_url = song.thumbnail_url.clone();
-        let path = song.path.clone();
+        let path = song.get_database_path();
         let song_id = self
-            .insert_song_with_path(title, youtube_id, thumbnail_url, path)
+            .insert_song_with_path(title, youtube_id, thumbnail_url, Some(path))
             .await?;
 
         let artists_vec = song.artists.clone().unwrap_or(vec![]);
@@ -1005,24 +1016,24 @@ impl DbConnection {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn update_song(
         &self,
         song_id: i32,
         title: String,
         youtube_id: Option<String>,
         thumbnail_url: Option<String>,
+        path: Option<String>,
     ) -> Result<i32, DatabaseError> {
-        let _model = song::ActiveModel {
+        let model = song::ActiveModel {
             id: ActiveValue::Set(song_id),
             title: ActiveValue::Set(title),
             youtube_id: ActiveValue::Set(youtube_id),
             thumbnail_url: ActiveValue::Set(thumbnail_url),
-            // TODO: update path here
-            ..Default::default()
+            path: ActiveValue::Set(path),
         };
-        todo!("implement updating the path value");
 
-        // Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
+        Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
     }
 
     pub async fn update_all_from_app_song(&self, song: AppSong) -> Result<(), DatabaseError> {
@@ -1031,9 +1042,148 @@ impl DbConnection {
             song.get_title_string(),
             song.yt_id.clone(),
             song.tb_url.clone(),
+            // TODO: update path from TUI
+            None,
         )
         .await?;
         // TODO: update artists, albums, etc
+        Ok(())
+    }
+
+    pub async fn update_all_from_gui_song(&self, song: GSong) -> Result<(), DatabaseError> {
+        if let Some(previous_model) =
+            SongEntity::find_by_id(song.id.ok_or(DatabaseError::NoSongId)?)
+                .one(self.ref_db())
+                .await?
+        {
+            self.update_song(
+                song.id.ok_or(DatabaseError::NoSongId)?,
+                song.get_title_string(),
+                song.youtube_id.clone(),
+                song.thumbnail_url.clone(),
+                Some(song.get_database_path()),
+            )
+            .await?;
+
+            // call functions to update
+            let new_artists = song.artists.unwrap_or_default();
+            self.update_song_artists_links(previous_model.clone(), new_artists)
+                .await?;
+            let new_albums = song.albums.unwrap_or_default();
+            self.update_song_albums_links(previous_model.clone(), new_albums)
+                .await?;
+            let new_genres = song.genres.unwrap_or_default();
+            self.update_song_genres_links(previous_model.clone(), new_genres)
+                .await?;
+
+            // TODO: update youtube_playlists
+        } else {
+            return Err(DatabaseError::NoSongFound);
+        }
+
+        // update song
+
+        Ok(())
+    }
+
+    /// update relation of a song's artists by deleting all relations and adding new ones
+    #[tracing::instrument(skip_all, fields(id = song.id))]
+    async fn update_song_artists_links(
+        &self,
+        song: SongModel,
+        new_artists: Vec<ArtistModel>,
+    ) -> Result<(), DatabaseError> {
+        let rows = SongArtistJunction::delete_many()
+            .filter(
+                Condition::all().add(Expr::col(song_artist_junction::Column::SongId).eq(song.id)),
+            )
+            .exec(self.ref_db())
+            .await?
+            .rows_affected;
+        trace!("rows affected: {rows}");
+
+        for (i, new_artist) in new_artists.iter().enumerate() {
+            // create new from name or use existing
+            let artist = self.insert_artist(new_artist.name.clone()).await?;
+            let insert_id = self.insert_song_artist(artist, song.id).await?;
+
+            info!(
+                "Inserted artist {} [{}], number {}",
+                new_artist.name, insert_id, i
+            );
+        }
+        Ok(())
+    }
+
+    /// update relation of a song's albums by deleting all relations and adding new ones
+    #[tracing::instrument(skip_all, fields(id = song.id))]
+    async fn update_song_albums_links(
+        &self,
+        song: SongModel,
+        new_albums: Vec<AlbumModel>,
+    ) -> Result<(), DatabaseError> {
+        let rows = SongAlbumJunction::delete_many()
+            .filter(
+                Condition::all().add(Expr::col(song_album_junction::Column::SongId).eq(song.id)),
+            )
+            .exec(self.ref_db())
+            .await?
+            .rows_affected;
+        trace!("rows affected: {rows}");
+
+        for (i, new_album) in new_albums.iter().enumerate() {
+            // create new from name or use existing
+            let album = self.insert_album(new_album.name.clone()).await?;
+            let model = song_album_junction::ActiveModel {
+                song_id: ActiveValue::Set(song.id),
+                album_id: ActiveValue::Set(album),
+                ..Default::default()
+            };
+            let insert_id = SongAlbumJunction::insert(model)
+                .exec(self.ref_db())
+                .await?
+                .last_insert_id;
+            info!(
+                "Inserted album {} [{}], number {}",
+                new_album.name, insert_id, i
+            );
+        }
+        Ok(())
+    }
+
+    /// update relation of a song's genres by deleting all relations and adding new ones
+    #[tracing::instrument(skip_all, fields(id = song.id))]
+    async fn update_song_genres_links(
+        &self,
+        song: SongModel,
+        new_genres: Vec<GenreModel>,
+    ) -> Result<(), DatabaseError> {
+        let rows = SongGenreJunction::delete_many()
+            .filter(
+                Condition::all().add(Expr::col(song_genre_junction::Column::SongId).eq(song.id)),
+            )
+            .exec(self.ref_db())
+            .await?
+            .rows_affected;
+        trace!("rows affected: {rows}");
+
+        for (i, new_genres) in new_genres.iter().enumerate() {
+            // create new from name or use existing
+            let genre = self.insert_genre(new_genres.genre.clone()).await?;
+            let model = song_genre_junction::ActiveModel {
+                song_id: ActiveValue::Set(song.id),
+                genre_id: ActiveValue::Set(genre),
+                ..Default::default()
+            };
+            let insert_id = SongGenreJunction::insert(model)
+                .exec(self.ref_db())
+                .await?
+                .last_insert_id;
+            info!(
+                "Inserted genre {} [{}], number {}",
+                new_genres.genre, insert_id, i
+            );
+        }
         Ok(())
     }
 
@@ -1208,6 +1358,8 @@ pub mod error {
         SeaOrm(#[from] sea_orm::DbErr),
         #[error("No song id was given")]
         NoSongId,
+        #[error("No song was found with the associated ID")]
+        NoSongFound,
     }
 }
 

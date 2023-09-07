@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use strum::Display;
 use tracing::debug;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
 };
 
 /// Source of the song file. Other than local is supported download source
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Display)]
 pub enum Source {
     /// Download from Youtube / Youtube Music
     Youtube,
@@ -24,6 +25,7 @@ pub enum Source {
 /// Song data. Use setters to set data
 #[derive(Default, Clone, Debug)]
 pub struct Song {
+    pub music_dir: PathBuf,
     /// Path to song on the filesystem
     pub path: Option<PathBuf>,
     /// Database id if available
@@ -46,7 +48,7 @@ pub struct Song {
     /// Local thumbnail
     pub thumbnail: Option<Vec<u8>>,
     /// Source of the file
-    source: Source,
+    pub source: Source,
     pub update_required: bool,
     pub in_database: bool,
 }
@@ -208,10 +210,31 @@ impl Song {
             true
         }
     }
+
+    /// Returns the path without music dir
+    ///
+    /// Ensure portability between OS
+    pub fn get_database_path(&self) -> String {
+        if let Some(path) = self.path.as_ref() {
+            let mut music_compo = self.music_dir.components();
+            let mut path_compo = path.components();
+            while music_compo.next().is_some() {
+                path_compo.next();
+            }
+            debug!("{:?}", &path_compo.as_path());
+            path_compo
+                .as_path()
+                .to_str()
+                .expect("no file name errors")
+                .to_string()
+        } else {
+            String::new()
+        }
+    }
 }
 
 pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> {
-    let files = walkdir::WalkDir::new(music_dir)
+    let files = walkdir::WalkDir::new(music_dir.clone())
         // only 1 dir deep for now
         .max_depth(1)
         .into_iter()
@@ -231,6 +254,7 @@ pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> 
             let mut song = tags::read_tags_to_gui_song(file)
                 .await
                 .expect("can read tags");
+            song.music_dir = music_dir.clone();
 
             // check if song is in database
             let in_database = db.check_song_in_database(&song).await;
@@ -244,6 +268,7 @@ pub async fn load_songs(music_dir: PathBuf, db: Arc<DbConnection>) -> Vec<Song> 
                 id_present.push(song.id.expect("has id if true in database"));
             }
             song.in_database = in_database;
+            song.get_database_path();
             svec.push(song)
         }
         (svec, id_present)

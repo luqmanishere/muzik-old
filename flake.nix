@@ -145,8 +145,8 @@
             {
               name = "PKG_CONFIG_PATH";
               value = lib.strings.makeSearchPath "lib/pkgconfig" [
-                zlib.dev
                 openssl.dev
+                zlib.dev
                 glib.dev
                 gdk-pixbuf.dev
                 pango.dev
@@ -161,12 +161,21 @@
               ];
             }
             {
-              name = "LD_FLAGS";
-              value = "-L${zlib}/lib";
-            }
-            {
               name = "LD_LIBRARY_PATH";
-              value = lib.makeLibraryPath [zlib];
+              value = lib.makeLibraryPath [
+                libxkbcommon
+                libGL
+
+                # WINIT_UNIX_BACKEND=wayland
+                wayland
+
+                # WINIT_UNIX_BACKEND=x11
+                xorg.libXcursor
+                xorg.libXrandr
+                xorg.libXi
+                xorg.libX11
+                openssl
+              ];
             }
           ];
 
@@ -182,9 +191,9 @@
             jq
             yt-dlp
             opusTools
-            zlib
-            zlib.dev
             llvmPackages_16.bintools
+            mold
+            openssl
           ];
 
           commands = [

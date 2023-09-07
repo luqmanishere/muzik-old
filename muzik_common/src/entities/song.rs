@@ -2,6 +2,9 @@
 
 use sea_orm::entity::prelude::*;
 
+pub type SongModel = Model;
+pub type SongEntity = Entity;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "song")]
 pub struct Model {

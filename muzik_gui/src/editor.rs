@@ -3,17 +3,17 @@ use std::sync::Arc;
 use iced::{
     alignment,
     widget::{
-        checkbox, column, container, image::Handle, row, scrollable, text, vertical_space, Button,
-        Column, Image, Text,
+        checkbox, column, container, horizontal_rule, image::Handle, row, scrollable, text,
+        vertical_space, Button, Column, Image, Text,
     },
     Command, Element, Length,
 };
 use iced_aw::{Split, TabLabel};
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace};
 
 use crate::config::Config;
 use muzik_common::{
-    data::{load_songs, Song},
+    data::{self, load_songs, Song},
     database::DbConnection,
     entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
     tags::{self, write_tags_song},
@@ -188,17 +188,19 @@ impl Tab for EditorTab {
                         songs.push(item);
                     }
                 }
+            } else {
+                return text("loading...").into();
             }
 
             if !songs.is_empty() {
                 scrollable(column(songs)).into()
             } else {
-                text("loading.......").into()
+                text("no songs! try toggeling DB view or adding new entries").into()
             }
         };
 
         let second_panel: Element<_> = if let Some(song) = self.current_app_song.as_ref() {
-            let mut sp_col = Column::new();
+            let mut sp_col = Column::new().spacing(10);
 
             // render image if available
             let img_header = text("Image");
@@ -224,8 +226,29 @@ impl Tab for EditorTab {
                 self.title_text_input.as_ref().unwrap_or(&String::new()),
             )
             .on_input(|input| Msg::Editor(EditorMessage::TitleTextInput(input)));
+            sp_col = sp_col
+                .push(title)
+                .push(title_input)
+                .push(horizontal_rule(1));
 
-            sp_col = sp_col.push(title).push(title_input);
+            let path = {
+                let path = if let Some(path) = song.path.as_ref() {
+                    let conv = path.display().to_string();
+                    if !conv.is_empty() && path.exists() {
+                        conv
+                    } else if !conv.is_empty() && !path.exists() {
+                        format!("{} - Not on disk", conv)
+                    } else {
+                        "No path provided".to_string()
+                    }
+                } else {
+                    "No path provided".to_string()
+                };
+
+                text(format!("Local path: {}", path))
+            };
+            sp_col = sp_col.push(path).push(horizontal_rule(1));
+
             let artist = text("Artists");
             let add_artist_button = Button::new("Add Artist")
                 .on_press(Msg::Editor(EditorMessage::AddArtistButton))
@@ -248,9 +271,10 @@ impl Tab for EditorTab {
                         row(vec![artist.into(), add_artist_button, remove_artist_button])
                             .spacing(10),
                     )
-                    .align_y(alignment::Vertical::Bottom),
+                    .align_y(alignment::Vertical::Center),
                 )
-                .push(artist_col);
+                .push(artist_col)
+                .push(horizontal_rule(1));
 
             let album_header = Text::new("Albums");
             let add_album_button = Button::new("Add Album")
@@ -280,7 +304,8 @@ impl Tab for EditorTab {
                     )
                     .align_y(alignment::Vertical::Bottom),
                 )
-                .push(album_col);
+                .push(album_col)
+                .push(horizontal_rule(1));
 
             let genre_header = Text::new("Genre");
             let add_genre_button = Button::new("Add Genre")
@@ -310,7 +335,25 @@ impl Tab for EditorTab {
                     )
                     .align_y(alignment::Vertical::Bottom),
                 )
-                .push(genre_col);
+                .push(genre_col)
+                .push(horizontal_rule(1));
+
+            let source_disp = text(format!("Source: {}", song.source));
+            sp_col = sp_col.push(source_disp);
+
+            // only show this if the source is Youtube
+            if song.source == data::Source::Youtube {
+                let youtube_id = {
+                    let id = if let Some(youtube_id) = song.youtube_id.as_ref() {
+                        format!("Youtube ID: {}", youtube_id)
+                    } else {
+                        "Youtube ID: None".to_string()
+                    };
+                    text(id)
+                };
+                sp_col = sp_col.push(youtube_id).push(horizontal_rule(1));
+                // TODO: allow editing yt playlists
+            }
 
             let submit_button =
                 Button::new("Submit").on_press(Msg::Editor(EditorMessage::SubmitChanges()));
@@ -441,6 +484,55 @@ impl Tab for EditorTab {
                         Some(_id) => {
                             // is in database
                             // TODO: update song based on given inputs
+                            let mut song = current_song.clone();
+                            if let Some(artist_text_inputs) = self.artist_text_input.as_ref() {
+                                let artists_vec: Vec<_> = artist_text_inputs
+                                    .iter()
+                                    .map(|s| ArtistModel {
+                                        name: s.value.clone(),
+                                        ..Default::default()
+                                    })
+                                    .collect();
+                                song.set_artists(artists_vec);
+                                // todo: get other values
+                            }
+                            if let Some(album_text_inputs) = self.album_text_input.as_ref() {
+                                let albums_vec: Vec<_> = album_text_inputs
+                                    .iter()
+                                    .map(|s| AlbumModel {
+                                        name: s.value.clone(),
+                                        ..Default::default()
+                                    })
+                                    .collect();
+                                song.set_albums(albums_vec);
+                            }
+                            if let Some(genre_text_inputs) = self.genre_text_input.as_ref() {
+                                let genres_vec: Vec<_> = genre_text_inputs
+                                    .iter()
+                                    .map(|s| GenreModel {
+                                        genre: s.value.clone(),
+                                        ..Default::default()
+                                    })
+                                    .collect();
+                                song.set_genres(genres_vec);
+                            }
+                            debug!("{:?}", &song);
+                            let db = self.db.clone();
+                            return Command::perform(
+                                async move {
+                                    match db.update_all_from_gui_song(song.clone()).await {
+                                        Ok(_) => {
+                                            info!("update database entries successfully");
+                                            (true, song)
+                                        }
+                                        Err(e) => {
+                                            error!("error updating database: {e}");
+                                            (false, song)
+                                        }
+                                    }
+                                },
+                                |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
+                            );
                         }
                         None => {
                             // is not in a database
@@ -517,7 +609,7 @@ impl Tab for EditorTab {
                         |res| Msg::Editor(EditorMessage::AfterTagWrite(res)),
                     );
                 }
-                false => todo!(),
+                false => {}
             },
             EditorMessage::AfterTagWrite(_res) => {
                 return Command::perform(async {}, |_| Msg::Editor(EditorMessage::ReloadButton))

@@ -3,6 +3,7 @@
 use sea_orm::entity::prelude::*;
 
 pub type ArtistModel = Model;
+pub type ArtistEntity = Entity;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "artist")]
