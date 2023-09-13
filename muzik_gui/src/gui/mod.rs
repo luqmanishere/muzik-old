@@ -9,10 +9,15 @@ use iced::{
 use iced_aw::{TabLabel, Tabs};
 use muzik_common::database::DbConnection;
 
-use crate::{
-    config::Config,
-    editor::{EditorMessage, EditorTab},
-};
+use crate::config::Config;
+
+use self::editor::{EditorMessage, EditorTab};
+
+mod downloader;
+mod editor;
+mod hoverable;
+mod multi_input;
+mod theme;
 
 /// GUI start point
 #[allow(dead_code)]

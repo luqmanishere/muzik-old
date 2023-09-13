@@ -7,15 +7,12 @@ use tracing_subscriber::{filter, fmt, prelude::__tracing_subscriber_SubscriberEx
 use crate::config::ReadConfig;
 
 mod config;
-mod editor;
 mod gui;
-mod hoverable;
-mod multi_input;
-mod theme;
 
 fn main() -> Result<()> {
     let _args = Cli::parse();
 
+    // TODO: impl logging to file as well
     let subscriber = tracing_subscriber::registry().with(
         fmt::layer().with_ansi(true).with_filter(
             filter::EnvFilter::builder()
@@ -28,6 +25,7 @@ fn main() -> Result<()> {
     info!("logger started!");
     // let mut _guards = start_tui_log(PathBuf::from("/tmp"));
 
+    // FIXME: this is an ugly hax pls fix
     let config = {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()

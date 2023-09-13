@@ -20,8 +20,8 @@ use muzik_common::{
 };
 
 use super::{
-    gui::{Msg, Tab},
     multi_input::{MultiStringInput, MultiStringInputMessage},
+    Msg, Tab,
 };
 
 #[derive(Debug, Clone)]
