@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use iced::{Application, Settings};
 use miette::{IntoDiagnostic, Result};
@@ -12,14 +14,31 @@ mod gui;
 fn main() -> Result<()> {
     let _args = Cli::parse();
 
-    // TODO: impl logging to file as well
-    let subscriber = tracing_subscriber::registry().with(
-        fmt::layer().with_ansi(true).with_filter(
-            filter::EnvFilter::builder()
-                .with_default_directive(filter::LevelFilter::INFO.into())
-                .from_env_lossy(),
-        ),
-    );
+    let mut guards = vec![];
+
+    let tmp = PathBuf::from("/tmp/muzik");
+    let file_appender = tracing_appender::rolling::daily(tmp, "log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    guards.push(guard);
+    let subscriber = tracing_subscriber::registry()
+        .with(
+            fmt::layer().with_ansi(true).with_filter(
+                filter::EnvFilter::builder()
+                    .with_default_directive(filter::LevelFilter::INFO.into())
+                    .from_env_lossy(),
+            ),
+        )
+        .with(
+            fmt::Layer::new()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_timer(tracing_subscriber::fmt::time::time())
+                .with_filter(
+                    tracing_subscriber::filter::EnvFilter::builder()
+                        .with_default_directive(filter::LevelFilter::INFO.into())
+                        .from_env_lossy(),
+                ),
+        );
     // use that subscriber to process traces emitted after this point
     tracing::subscriber::set_global_default(subscriber).into_diagnostic()?;
     info!("logger started!");

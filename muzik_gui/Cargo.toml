@@ -20,10 +20,11 @@ tracing-subscriber = { version = "0.3", features = [
     "fmt",
     "time",
 ] }
+tracing-appender = { version = "0.2" }
 iced = { version = "0.10", features = ["tokio", "image", "advanced"] }
 iced_aw = { version = "0.7", features = ["split", "tabs"] }
 iced_native = "0.10"
 image = { version = "^0" }
 serde = { version = "1", features = ["derive"] }
-toml = { version = "0.7" }
+toml = { version = "0.8" }
 cosmic-text = { git = "https://github.com/pop-os/cosmic-text" }
