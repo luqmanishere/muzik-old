@@ -3,8 +3,8 @@ use std::sync::Arc;
 use iced::{
     alignment,
     widget::{
-        checkbox, column, container, horizontal_rule, image::Handle, row, scrollable, text,
-        vertical_space, Button, Column, Image, Text,
+        checkbox, column, container, horizontal_rule, image::Handle, row, scrollable, text, Button,
+        Column, Image, Text,
     },
     Command, Element, Length,
 };
@@ -153,8 +153,7 @@ impl EditorTab {
 }
 
 impl Tab for EditorTab {
-    type Message = EditorMessage;
-    type ReturnMessage = Msg;
+    type Message = Msg;
 
     fn title(&self) -> String {
         "editor".to_string()
@@ -164,10 +163,10 @@ impl Tab for EditorTab {
         TabLabel::Text(self.title())
     }
 
-    fn content(&self) -> Element<'_, Self::ReturnMessage> {
-        trace!("content!");
+    fn content(&self) -> Element<'_, Self::Message> {
+        trace!("content render start!");
         let reload_button = Button::new("Reload")
-            .on_press(Self::ReturnMessage::Editor(EditorMessage::ReloadButton))
+            .on_press(Self::Message::Editor(EditorMessage::ReloadButton))
             .into();
         let songs: Element<_> = {
             let mut songs = vec![];
@@ -366,7 +365,7 @@ impl Tab for EditorTab {
 
         let row = column(vec![
             checkbox("Show items from database", self.db_songs_visibility, |b| {
-                Self::ReturnMessage::Editor(EditorMessage::DbVisibleToggle(b))
+                Self::Message::Editor(EditorMessage::DbVisibleToggle(b))
             })
             .into(),
             reload_button,
@@ -375,13 +374,11 @@ impl Tab for EditorTab {
                 second_panel,
                 self.hor_divider_pos,
                 iced_aw::split::Axis::Vertical,
-                |resize| Self::ReturnMessage::Editor(EditorMessage::DividerResize(resize)),
+                |resize| Self::Message::Editor(EditorMessage::DividerResize(resize)),
             ))
             .height(Length::Fill)
             .width(Length::Fill)
             .into(),
-            vertical_space(0).into(),
-            iced::widget::horizontal_rule(1).into(),
         ])
         .padding(5)
         .spacing(10);
@@ -396,226 +393,231 @@ impl Tab for EditorTab {
             .into()
     }
 
-    fn update(&mut self, message: Self::Message) -> iced::Command<Self::ReturnMessage> {
-        match message {
-            EditorMessage::LoadSongs(songs) => self.songs_vec = Some(songs),
-            EditorMessage::DbVisibleToggle(b) => self.db_songs_visibility = b,
-            EditorMessage::DividerResize(size) => self.hor_divider_pos = Some(size),
-            EditorMessage::SongButton(song) => {
-                self.current_app_song = Some(song.clone());
-                self.current_app_song_image = None;
-                self.reset_input_fields();
-                if let Some(path) = song.path.clone() {
-                    return Command::perform(
-                        async {
-                            match tags::read_picture(path).await {
-                                Ok(pic) => pic,
-                                Err(e) => {
-                                    error!("{e}");
-                                    vec![]
+    fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
+        if let Self::Message::Editor(msg) = message {
+            match msg {
+                EditorMessage::LoadSongs(songs) => self.songs_vec = Some(songs),
+                EditorMessage::DbVisibleToggle(b) => self.db_songs_visibility = b,
+                EditorMessage::DividerResize(size) => self.hor_divider_pos = Some(size),
+                EditorMessage::SongButton(song) => {
+                    self.current_app_song = Some(song.clone());
+                    self.current_app_song_image = None;
+                    self.reset_input_fields();
+                    if let Some(path) = song.path.clone() {
+                        return Command::perform(
+                            async {
+                                match tags::read_picture(path).await {
+                                    Ok(pic) => pic,
+                                    Err(e) => {
+                                        error!("{e}");
+                                        vec![]
+                                    }
                                 }
-                            }
-                        },
-                        |res| Msg::Editor(EditorMessage::LoadSongImage(res)),
-                    );
+                            },
+                            |res| Msg::Editor(EditorMessage::LoadSongImage(res)),
+                        );
+                    }
                 }
-            }
-            EditorMessage::LoadSongImage(pic) => {
-                self.current_app_song_image = Some(pic);
-            }
-            EditorMessage::ReloadButton => {
-                let db_action2 = self.db.clone();
-                let music_dir2 = self.config.get_music_dir();
-                return Command::batch(vec![Command::perform(
-                    async { load_songs(music_dir2, db_action2).await },
-                    |result| Self::ReturnMessage::Editor(EditorMessage::LoadSongs(result)),
-                )]);
-            }
-            EditorMessage::TitleTextInput(input) => self.title_text_input = Some(input),
-            EditorMessage::ArtistTextInput((id, val)) => {
-                if let Some(artist_input) = self.artist_text_input.as_mut() {
-                    artist_input[id].value = val.get_data();
+                EditorMessage::LoadSongImage(pic) => {
+                    self.current_app_song_image = Some(pic);
                 }
-            }
-            EditorMessage::AddArtistButton => {
-                if let Some(artists_input) = self.artist_text_input.as_mut() {
-                    artists_input.push(MultiStringInput::new(String::new()));
+                EditorMessage::ReloadButton => {
+                    let db_action2 = self.db.clone();
+                    let music_dir2 = self.config.get_music_dir();
+                    return Command::batch(vec![Command::perform(
+                        async { load_songs(music_dir2, db_action2).await },
+                        |result| Self::Message::Editor(EditorMessage::LoadSongs(result)),
+                    )]);
                 }
-            }
-            EditorMessage::RemoveLastArtistButton => {
-                if let Some(artist_inputs) = self.artist_text_input.as_mut() {
-                    artist_inputs.pop();
+                EditorMessage::TitleTextInput(input) => self.title_text_input = Some(input),
+                EditorMessage::ArtistTextInput((id, val)) => {
+                    if let Some(artist_input) = self.artist_text_input.as_mut() {
+                        artist_input[id].value = val.get_data();
+                    }
                 }
-            }
-            EditorMessage::AlbumTextInput((id, val)) => {
-                if let Some(album_input) = self.artist_text_input.as_mut() {
-                    album_input[id].value = val.get_data();
+                EditorMessage::AddArtistButton => {
+                    if let Some(artists_input) = self.artist_text_input.as_mut() {
+                        artists_input.push(MultiStringInput::new(String::new()));
+                    }
                 }
-            }
-            EditorMessage::AddAlbumButton => {
-                if let Some(albums_input) = self.album_text_input.as_mut() {
-                    albums_input.push(MultiStringInput::new(String::new()));
+                EditorMessage::RemoveLastArtistButton => {
+                    if let Some(artist_inputs) = self.artist_text_input.as_mut() {
+                        artist_inputs.pop();
+                    }
                 }
-            }
-            EditorMessage::RemoveLastAlbumButton => {
-                if let Some(albums_input) = self.album_text_input.as_mut() {
-                    albums_input.pop();
+                EditorMessage::AlbumTextInput((id, val)) => {
+                    if let Some(album_input) = self.artist_text_input.as_mut() {
+                        album_input[id].value = val.get_data();
+                    }
                 }
-            }
-            EditorMessage::GenreTextInput((id, val)) => {
-                if let Some(genre_input) = self.genre_text_input.as_mut() {
-                    genre_input[id].value = val.get_data();
+                EditorMessage::AddAlbumButton => {
+                    if let Some(albums_input) = self.album_text_input.as_mut() {
+                        albums_input.push(MultiStringInput::new(String::new()));
+                    }
                 }
-            }
-            EditorMessage::AddGenreButton => {
-                if let Some(genre_input) = self.genre_text_input.as_mut() {
-                    genre_input.push(MultiStringInput::new(String::new()));
+                EditorMessage::RemoveLastAlbumButton => {
+                    if let Some(albums_input) = self.album_text_input.as_mut() {
+                        albums_input.pop();
+                    }
                 }
-            }
-            EditorMessage::RemoveLastGenreButton => {
-                if let Some(genre_input) = self.genre_text_input.as_mut() {
-                    genre_input.pop();
+                EditorMessage::GenreTextInput((id, val)) => {
+                    if let Some(genre_input) = self.genre_text_input.as_mut() {
+                        genre_input[id].value = val.get_data();
+                    }
                 }
-            }
-            EditorMessage::SubmitChanges() => {
-                // todo: if in database, update. if not in database, add new
-                if let Some(current_song) = self.current_app_song.as_ref() {
-                    match current_song.id {
-                        Some(_id) => {
-                            // is in database
-                            // TODO: update song based on given inputs
-                            let mut song = current_song.clone();
-                            if let Some(artist_text_inputs) = self.artist_text_input.as_ref() {
-                                let artists_vec: Vec<_> = artist_text_inputs
-                                    .iter()
-                                    .map(|s| ArtistModel {
-                                        name: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_artists(artists_vec);
-                                // todo: get other values
-                            }
-                            if let Some(album_text_inputs) = self.album_text_input.as_ref() {
-                                let albums_vec: Vec<_> = album_text_inputs
-                                    .iter()
-                                    .map(|s| AlbumModel {
-                                        name: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_albums(albums_vec);
-                            }
-                            if let Some(genre_text_inputs) = self.genre_text_input.as_ref() {
-                                let genres_vec: Vec<_> = genre_text_inputs
-                                    .iter()
-                                    .map(|s| GenreModel {
-                                        genre: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_genres(genres_vec);
-                            }
-                            debug!("{:?}", &song);
-                            let db = self.db.clone();
-                            return Command::perform(
-                                async move {
-                                    match db.update_all_from_gui_song(song.clone()).await {
-                                        Ok(_) => {
-                                            info!("update database entries successfully");
-                                            (true, song)
+                EditorMessage::AddGenreButton => {
+                    if let Some(genre_input) = self.genre_text_input.as_mut() {
+                        genre_input.push(MultiStringInput::new(String::new()));
+                    }
+                }
+                EditorMessage::RemoveLastGenreButton => {
+                    if let Some(genre_input) = self.genre_text_input.as_mut() {
+                        genre_input.pop();
+                    }
+                }
+                EditorMessage::SubmitChanges() => {
+                    // todo: if in database, update. if not in database, add new
+                    if let Some(current_song) = self.current_app_song.as_ref() {
+                        match current_song.id {
+                            Some(_id) => {
+                                // is in database
+                                // TODO: update song based on given inputs
+                                let mut song = current_song.clone();
+
+                                if let Some(artist_text_inputs) = self.artist_text_input.as_ref() {
+                                    let artists_vec: Vec<_> = artist_text_inputs
+                                        .iter()
+                                        .map(|s| ArtistModel {
+                                            name: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_artists(artists_vec);
+                                    // todo: get other values
+                                }
+                                if let Some(album_text_inputs) = self.album_text_input.as_ref() {
+                                    let albums_vec: Vec<_> = album_text_inputs
+                                        .iter()
+                                        .map(|s| AlbumModel {
+                                            name: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_albums(albums_vec);
+                                }
+                                if let Some(genre_text_inputs) = self.genre_text_input.as_ref() {
+                                    let genres_vec: Vec<_> = genre_text_inputs
+                                        .iter()
+                                        .map(|s| GenreModel {
+                                            genre: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_genres(genres_vec);
+                                }
+                                debug!("{:?}", &song);
+                                let db = self.db.clone();
+                                return Command::perform(
+                                    async move {
+                                        match db.update_all_from_gui_song(song.clone()).await {
+                                            Ok(_) => {
+                                                info!("update database entries successfully");
+                                                (true, song)
+                                            }
+                                            Err(e) => {
+                                                error!("error updating database: {e}");
+                                                (false, song)
+                                            }
                                         }
-                                        Err(e) => {
-                                            error!("error updating database: {e}");
-                                            (false, song)
-                                        }
-                                    }
-                                },
-                                |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
-                            );
-                        }
-                        None => {
-                            // is not in a database
-                            let mut song = current_song.clone();
-                            if let Some(artist_text_inputs) = self.artist_text_input.as_ref() {
-                                let artists_vec: Vec<_> = artist_text_inputs
-                                    .iter()
-                                    .map(|s| ArtistModel {
-                                        name: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_artists(artists_vec);
-                                // todo: get other values
+                                    },
+                                    |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
+                                );
                             }
-                            if let Some(album_text_inputs) = self.album_text_input.as_ref() {
-                                let albums_vec: Vec<_> = album_text_inputs
-                                    .iter()
-                                    .map(|s| AlbumModel {
-                                        name: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_albums(albums_vec);
-                            }
-                            if let Some(genre_text_inputs) = self.genre_text_input.as_ref() {
-                                let genres_vec: Vec<_> = genre_text_inputs
-                                    .iter()
-                                    .map(|s| GenreModel {
-                                        genre: s.value.clone(),
-                                        ..Default::default()
-                                    })
-                                    .collect();
-                                song.set_genres(genres_vec);
-                            }
-                            dbg!(&song);
-                            let db = self.db.clone();
-                            let song_clone = song.clone();
-                            return Command::perform(
-                                async move {
-                                    match db.insert_from_gui_song(song).await {
-                                        Ok(new_song) => {
-                                            info!("insert into database successfully");
-                                            (true, new_song)
+                            None => {
+                                // is not in a database
+                                let mut song = current_song.clone();
+                                if let Some(artist_text_inputs) = self.artist_text_input.as_ref() {
+                                    let artists_vec: Vec<_> = artist_text_inputs
+                                        .iter()
+                                        .map(|s| ArtistModel {
+                                            name: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_artists(artists_vec);
+                                    // todo: get other values
+                                }
+                                if let Some(album_text_inputs) = self.album_text_input.as_ref() {
+                                    let albums_vec: Vec<_> = album_text_inputs
+                                        .iter()
+                                        .map(|s| AlbumModel {
+                                            name: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_albums(albums_vec);
+                                }
+                                if let Some(genre_text_inputs) = self.genre_text_input.as_ref() {
+                                    let genres_vec: Vec<_> = genre_text_inputs
+                                        .iter()
+                                        .map(|s| GenreModel {
+                                            genre: s.value.clone(),
+                                            ..Default::default()
+                                        })
+                                        .collect();
+                                    song.set_genres(genres_vec);
+                                }
+                                dbg!(&song);
+                                let db = self.db.clone();
+                                let song_clone = song.clone();
+                                return Command::perform(
+                                    async move {
+                                        match db.insert_from_gui_song(song).await {
+                                            Ok(new_song) => {
+                                                info!("insert into database successfully");
+                                                (true, new_song)
+                                            }
+                                            Err(e) => {
+                                                error!("error inserting song into database: {e}");
+                                                (false, song_clone)
+                                            }
                                         }
-                                        Err(e) => {
-                                            error!("error inserting song into database: {e}");
-                                            (false, song_clone)
-                                        }
-                                    }
-                                },
-                                |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
-                            );
+                                    },
+                                    |res| Msg::Editor(EditorMessage::WriteAfterInsertSong(res)),
+                                );
+                            }
                         }
                     }
                 }
-            }
-            EditorMessage::WriteAfterInsertSong((res, song)) => match res {
-                true => {
-                    let path = song.path.clone().expect("inserted song has path");
-                    return Command::perform(
-                        async move {
-                            match write_tags_song(path, &song).await {
-                                Ok(_) => {
-                                    info!("successfully wrote tags to file");
-                                    true
+                EditorMessage::WriteAfterInsertSong((res, song)) => match res {
+                    true => {
+                        let path = song.path.clone().expect("inserted song has path");
+                        return Command::perform(
+                            async move {
+                                match write_tags_song(path, &song).await {
+                                    Ok(_) => {
+                                        info!("successfully wrote tags to file");
+                                        true
+                                    }
+                                    Err(e) => {
+                                        error!("failed to write tags to file: {e}");
+                                        false
+                                    }
                                 }
-                                Err(e) => {
-                                    error!("failed to write tags to file: {e}");
-                                    false
-                                }
-                            }
-                        },
-                        |res| Msg::Editor(EditorMessage::AfterTagWrite(res)),
-                    );
+                            },
+                            |res| Msg::Editor(EditorMessage::AfterTagWrite(res)),
+                        );
+                    }
+                    false => {}
+                },
+                EditorMessage::AfterTagWrite(_res) => {
+                    return Command::perform(async {}, |_| Msg::Editor(EditorMessage::ReloadButton))
                 }
-                false => {}
-            },
-            EditorMessage::AfterTagWrite(_res) => {
-                return Command::perform(async {}, |_| Msg::Editor(EditorMessage::ReloadButton))
             }
+            Command::none()
+        } else {
+            Command::none()
         }
-        Command::none()
     }
 }
 

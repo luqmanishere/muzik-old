@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     let mut guards = vec![];
 
     let tmp = PathBuf::from("/tmp/muzik");
-    let file_appender = tracing_appender::rolling::daily(tmp, "log");
+    let file_appender = tracing_appender::rolling::daily(tmp, "gui-log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     guards.push(guard);
     let subscriber = tracing_subscriber::registry()

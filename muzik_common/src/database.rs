@@ -328,12 +328,7 @@ pub struct DbConnection {
 use crate::{
     data::{Song as GSong, Source},
     entities::{
-        album::AlbumModel,
-        artist::{ArtistModel},
-        genre::GenreModel,
-        prelude::*,
-        song::SongModel,
-        *,
+        album::AlbumModel, artist::ArtistModel, genre::GenreModel, prelude::*, song::SongModel, *,
     },
 };
 use sea_orm::{prelude::*, ActiveValue, ConnectOptions, QuerySelect};
@@ -1031,6 +1026,18 @@ impl DbConnection {
             youtube_id: ActiveValue::Set(youtube_id),
             thumbnail_url: ActiveValue::Set(thumbnail_url),
             path: ActiveValue::Set(path),
+        };
+
+        Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)
+    }
+
+    pub async fn update_song_from_gui_song(&self, song: GSong) -> Result<i32, DatabaseError> {
+        let model = song::ActiveModel {
+            id: ActiveValue::Set(song.id.expect("exists")),
+            title: ActiveValue::Set(song.get_title_string()),
+            youtube_id: ActiveValue::Set(song.youtube_id.clone()),
+            thumbnail_url: ActiveValue::Set(song.thumbnail_url.clone()),
+            path: ActiveValue::Set(Some(song.get_database_path())),
         };
 
         Ok(SongEntity::update(model).exec(self.ref_db()).await?.id)

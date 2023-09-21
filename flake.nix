@@ -31,16 +31,17 @@
         inputs',
         ...
       }: let
-        crateName = "muzik";
+        crateGui = "muzik_gui";
         # shorthand for accessing this crate's outputs
         # you can access crate outputs under `config.nci.outputs.<crate name>` (see documentation)
-        crateOutputs = config.nci.outputs.${crateName};
+        crateOutputs = config.nci.outputs.${crateGui};
         binPath = lib.makeBinPath [
           pkgs.yt-dlp
           pkgs.ffmpeg_5-full
           pkgs.sqlite
           pkgs.opusTools
         ];
+        guiDeps = [];
       in {
         # declare projects
         # relPath is the relative path of a project to the flake root
@@ -48,12 +49,11 @@
           inherit system;
           overlays = [inputs.rust-overlay.overlays.default];
         };
-        nci.projects.${crateName}.relPath = "";
-        nci.toolchains = {
-          build = inputs.rust-overlay.packages."${system}".rust;
-        };
+
+        nci.projects.${crateGui}.relPath = "";
+
         # configure crates
-        nci.crates.${crateName} = {
+        nci.crates.${crateGui} = {
           # export crate (packages and devshell) in flake outputs
           # alternatively you can access the outputs and export them yourself (see below)
           export = true;
@@ -81,6 +81,7 @@
                   cairo.dev
                   gtk3.dev
                   harfbuzz.dev
+                  # TODO:trim dependencies
                   webkitgtk.dev
                   libayatana-appindicator.dev
                   atk.dev
@@ -89,7 +90,7 @@
                   zlib.dev
                 ];
               postInstall = ''
-                wrapProgram "$out/bin/${crateName}" --set PATH ${binPath}
+                wrapProgram "$out/bin/${crateGui}" --set PATH ${binPath}
               '';
             };
           };
@@ -127,6 +128,11 @@
             };
           };
         };
+
+        nci.toolchains = {
+          build = inputs.rust-overlay.packages."${system}".rust;
+        };
+
         # export the crate devshell as the default devshell
         devshells.default = with pkgs; {
           env = [
@@ -205,10 +211,31 @@
             }
 
             {
+              name = "run-gui";
+              command = "RUST_LOG=debug nix run .#muzik_gui";
+              help = "Run the muzik gui";
+              category = "Run";
+            }
+
+            {
               name = "run-dbtest";
               command = "RUST_LOG=debug nix run . -- db-test";
               help = "Run the dbtest";
               category = "Run";
+            }
+
+            {
+              name = "lrun-gui";
+              command = "RUST_LOG=debug cargo r -p muzik_gui";
+              help = "Locally run GUI";
+              category = "Local run";
+            }
+
+            {
+              name = "lrun-gui-skia-release";
+              command = "ICED_BACKEND=tiny-skia RUST_LOG=debug cargo r --release -p muzik_gui";
+              help = "Locally run GUI, with tiny-skia in release mode";
+              category = "Local run";
             }
 
             {
@@ -223,9 +250,9 @@
         packages.default = crateOutputs.packages.release;
 
         overlayAttrs = {
-          inherit (config.packages) muzik;
+          inherit (config.packages) muzik_gui;
         };
-        packages.muzik = crateOutputs.packages.release;
+        packages.muzik_gui = crateOutputs.packages.release;
       };
     };
 }
