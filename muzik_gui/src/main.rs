@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use iced::{Application, Settings};
+use iced::{
+    window::{icon, Icon},
+    Application, Settings,
+};
 use miette::{IntoDiagnostic, Result};
 use muzik_common::config::ReadConfig;
 use tracing::info;
@@ -63,9 +66,16 @@ fn main() -> Result<()> {
             .unwrap()
             .block_on(async { ReadConfig::read_config(None).await.expect("config exists") })
     };
+    // staticly load icon
+    let icon = include_bytes!("./gui/icon.png");
+    let icon = match icon::from_file_data(icon, None) {
+        Ok(ok) => Some(ok),
+        Err(_) => None,
+    };
     gui::GuiMain::run(Settings {
         window: iced::window::Settings {
             size: (1280, 720),
+            icon,
             ..Default::default()
         },
         flags: (config, Some(events_rx)),

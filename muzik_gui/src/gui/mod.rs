@@ -161,7 +161,7 @@ impl Application for GuiMain {
                 for event in &self.events_log {
                     events_column = events_column.push(event.display());
                 }
-                events_column.padding(10).into()
+                events_column.into()
             } else {
                 text("no logs to show").width(Length::Fill).into()
             };
@@ -172,6 +172,7 @@ impl Application for GuiMain {
             )
         }
         .width(Length::Fill)
+        .padding(10)
         .style(iced::theme::Container::Custom(Box::new(StatusBarContainer)));
 
         container(
