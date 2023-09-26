@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 muzik_common = { path = "../muzik_common" }
+crossbeam-channel = { version = "0.5" }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 miette = { version = "5", features = ["fancy"] }
@@ -22,8 +23,12 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 cosmic-text = { git = "https://github.com/pop-os/cosmic-text" }
 iced = { version = "0.10", features = ["tokio", "image", "advanced"] }
-iced_aw = { version = "0.7", features = ["split", "tabs", "modal", "card"] }
-iced_native = "0.10"
+iced_aw = { git = "https://github.com/iced-rs/iced_aw.git", rev = "fe2080080948f2ba51b6a442f0328a62dc59d662", features = [
+    "split",
+    "tabs",
+    "modal",
+    "card",
+] }
 image = { version = "^0" }
 serde = { version = "1", features = ["derive"] }
 strum = { version = "0.25", features = ["derive"] }

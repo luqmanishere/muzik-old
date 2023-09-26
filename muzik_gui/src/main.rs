@@ -3,13 +3,14 @@ use std::path::PathBuf;
 use clap::Parser;
 use iced::{Application, Settings};
 use miette::{IntoDiagnostic, Result};
+use muzik_common::config::ReadConfig;
 use tracing::info;
 use tracing_subscriber::{filter, fmt, prelude::__tracing_subscriber_SubscriberExt, Layer};
 
-use crate::config::ReadConfig;
+use crate::log::StatusLayer;
 
-mod config;
 mod gui;
+mod log;
 
 fn main() -> Result<()> {
     let _args = Cli::parse();
@@ -18,6 +19,8 @@ fn main() -> Result<()> {
 
     let tmp = PathBuf::from("/tmp/muzik");
     let file_appender = tracing_appender::rolling::daily(tmp, "gui-log");
+    let (tx, events_rx) = crossbeam_channel::unbounded();
+    let status_layer = StatusLayer::new(tx);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     guards.push(guard);
     let subscriber = tracing_subscriber::registry()
@@ -27,6 +30,14 @@ fn main() -> Result<()> {
                     .with_default_directive(filter::LevelFilter::INFO.into())
                     .from_env_lossy(),
             ),
+        )
+        .with(
+            status_layer.with_filter(
+                filter::EnvFilter::builder()
+                    .with_default_directive(filter::LevelFilter::INFO.into())
+                    .from_env_lossy(),
+            ),
+            //status_layer,
         )
         .with(
             fmt::Layer::new()
@@ -57,7 +68,7 @@ fn main() -> Result<()> {
             size: (1280, 720),
             ..Default::default()
         },
-        flags: config,
+        flags: (config, Some(events_rx)),
         // default_font: Font::MONOSPACE,
         ..Default::default()
     })

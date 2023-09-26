@@ -11,8 +11,8 @@ use iced::{
 use iced_aw::{Split, TabLabel};
 use tracing::{debug, error, info, trace};
 
-use crate::config::Config;
 use muzik_common::{
+    config::Config,
     data::{self, load_songs, Song},
     database::DbConnection,
     entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
@@ -389,7 +389,6 @@ impl Tab for EditorTab {
             .center_y()
             .padding(10)
             .width(Length::Fill)
-            .height(Length::Fill)
             .into()
     }
 

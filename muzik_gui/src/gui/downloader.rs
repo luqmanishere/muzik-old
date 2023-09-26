@@ -9,6 +9,7 @@ use iced::{
 };
 use iced_aw::{card, modal, Split, TabLabel};
 use muzik_common::{
+    config::Config,
     data::{Song, Source},
     database::DbConnection,
     entities::{album::AlbumModel, artist::ArtistModel, genre::GenreModel},
@@ -17,8 +18,6 @@ use muzik_common::{
 };
 use strum::{Display, EnumIter, IntoEnumIterator};
 use tracing::{debug, error, info};
-
-use crate::config::Config;
 
 use super::{
     multi_input::{MultiStringInput, MultiStringInputMessage},
@@ -104,9 +103,12 @@ impl DownloaderTab {
         (tab, Command::none())
     }
 
+    /// Element returned is rendered in a modal called after by ____
     fn metadata_popup(&self, video: &SingleVideo) -> Element<'_, Msg> {
+        // main column
         let mut sp_col = Column::new().spacing(10);
 
+        // title text input
         let title = Text::new("Title");
         let title_input = iced::widget::TextInput::new(
             &video.title.clone().unwrap_or("Unknown".to_string()),
@@ -118,6 +120,7 @@ impl DownloaderTab {
             .push(title_input)
             .push(horizontal_rule(1));
 
+        // artist text inputs
         let artist = text("Artists");
         let add_artist_button = Button::new("+")
             .on_press(Msg::Downloader(DownloaderMsg::AddArtistButton))
@@ -144,6 +147,7 @@ impl DownloaderTab {
             .push(artist_col)
             .push(horizontal_rule(1));
 
+        // album text inputs
         let album_header = Text::new("Albums");
         let add_album_button = Button::new("+")
             .on_press(Msg::Downloader(DownloaderMsg::AddAlbumButton))
@@ -175,6 +179,7 @@ impl DownloaderTab {
             .push(album_col)
             .push(horizontal_rule(1));
 
+        // genre text inputs
         let genre_header = Text::new("Genre");
         let add_genre_button = Button::new("+")
             .on_press(Msg::Downloader(DownloaderMsg::AddGenreButton))
@@ -206,17 +211,21 @@ impl DownloaderTab {
             .push(genre_col)
             .push(horizontal_rule(1));
 
+        // manually ask them to press the submit button
         let submit_button = Row::new()
             .push(Button::new("Submit").on_press(Msg::Downloader(DownloaderMsg::SubmitChanges)));
         sp_col = sp_col.push(submit_button);
 
+        // make scrollable
         scrollable(sp_col).into()
     }
 
+    /// called by update with message SourcePick
     fn update_source_pick(&mut self, sp: DownloadSource) {
         self.source_picklist = Some(sp)
     }
 
+    /// called by update with message `SearchBarInput`
     fn update_search_bar_input(&mut self, input: String) {
         self.search_bar = input
     }
@@ -230,7 +239,7 @@ impl DownloaderTab {
                 self.search_lock = true;
                 return Some(Command::batch(vec![
                     Command::perform(async {}, |_| {
-                        Msg::PushAction(Actions::SearchYoutube(search1))
+                        Msg::PushAction(Actions::SearchYoutubeStart(search1))
                     }),
                     Command::perform(
                         async {
@@ -336,6 +345,7 @@ impl Tab for DownloaderTab {
             text("Search to view results").into()
         };
 
+        // details pane
         let details: Element<'_, Msg> = if let Some(selected_result) = self.selected_result.as_ref()
         {
             selected_result.details(self.selected_result_thumbnail.as_ref())
@@ -352,10 +362,9 @@ impl Tab for DownloaderTab {
             if self.show_metadata_input_modal {
                 // construct overlay here
                 let fields: Element<'_, Msg> = if let Some(video) = self.selected_result.as_ref() {
-                    // TODO: more popup friendly UI
                     self.metadata_popup(video)
                 } else {
-                    text("test").into()
+                    text("no search result was selected, how did you get here?").into()
                 };
                 Some(
                     card(text("Input Metadata"), fields)
@@ -367,7 +376,13 @@ impl Tab for DownloaderTab {
             }
         };
 
-        modal(main_column, overlay).into()
+        // return the modal
+        container(modal(main_column, overlay))
+            .center_x()
+            .center_y()
+            .padding(10)
+            .width(Length::Fill)
+            .into()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -400,12 +415,18 @@ impl Tab for DownloaderTab {
                     self.artist_text_input = None;
                     self.album_text_input = None;
                     self.genre_text_input = None;
+
+                    // initiate fields, with data if available
                     if let Some(video) = self.selected_result.as_ref() {
                         let title = video.title.clone().unwrap_or("Unknown".to_string());
                         self.title_text_input = Some(title);
 
                         if let Some(artist) = video.artist.clone() {
                             self.artist_text_input = Some(vec![MultiStringInput::new(artist)]);
+                        } else {
+                            self.artist_text_input = Some(vec![MultiStringInput::new(
+                                video.channel.clone().unwrap_or("Unknown".to_string()),
+                            )]);
                         }
 
                         if let Some(album) = video.album.clone() {
@@ -526,6 +547,7 @@ impl Tab for DownloaderTab {
 
                         debug!("{:?}", &song);
                         let db = self.db.clone();
+                        // Command::perform(async {}, |_|Msg::PushAction(Actions::DoneInsertIntoDatabase(())))
                         return Command::perform(
                             async move {
                                 match db.insert_from_gui_song(song.clone()).await {

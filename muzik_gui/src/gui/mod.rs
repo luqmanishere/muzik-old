@@ -1,15 +1,23 @@
 use std::sync::Arc;
 
+use crossbeam_channel::Receiver;
 use iced::{
+    futures::SinkExt,
     keyboard::{self, KeyCode, Modifiers},
     theme::Theme,
-    widget::{column, container, horizontal_rule, row, scrollable, text, vertical_rule, Column},
-    Application, Command, Element, Event, Length,
+    widget::{
+        column, container, horizontal_rule, scrollable as scrollablefn,
+        scrollable::{self, RelativeOffset},
+        text, vertical_space, Column,
+    },
+    Application, Command, Element, Event, Length, Subscription,
 };
 use iced_aw::{TabLabel, Tabs};
-use muzik_common::database::DbConnection;
+use muzik_common::{config::Config, database::DbConnection};
+use tokio::task::block_in_place;
+use tracing::error;
 
-use crate::config::Config;
+use crate::log::GuiEvent;
 
 use self::{
     downloader::{DownloaderMsg, DownloaderTab},
@@ -19,9 +27,10 @@ use self::{
 
 mod downloader;
 mod editor;
-mod hoverable;
 mod multi_input;
 mod theme;
+
+struct StatusScroll;
 
 /// GUI start point
 #[allow(dead_code)]
@@ -34,33 +43,38 @@ pub struct GuiMain {
     downloader_state: DownloaderTab,
 
     action_log: Vec<Actions>,
+    events_log_receiver: Receiver<GuiEvent>,
+    events_log: Vec<GuiEvent>,
 }
 
 impl Application for GuiMain {
     type Message = Msg;
     type Theme = Theme;
     type Executor = iced::executor::Default;
-    type Flags = Config;
+    type Flags = (Config, Option<Receiver<GuiEvent>>);
 
-    fn new(_flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
+    fn new(flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
+        let (flags, events_log) = flags;
+        let events_log = events_log.expect("provided");
         let mut commands = vec![];
+        let db = Arc::new(flags.db_new.clone());
 
-        let db = Arc::new(_flags.db_new.clone());
-
-        let (editor_state, e_comms) = EditorTab::new_with_command(_flags.clone(), db.clone());
+        let (editor_state, e_comms) = EditorTab::new_with_command(flags.clone(), db.clone());
         commands.push(e_comms);
 
-        let (downloader_state, d_comms) = DownloaderTab::new(_flags.clone(), db.clone());
+        let (downloader_state, d_comms) = DownloaderTab::new(flags.clone(), db.clone());
         commands.push(d_comms);
 
         (
             Self {
-                config: _flags.clone(),
+                config: flags.clone(),
                 db: db.clone(),
                 active_tab: TabId::Editor,
                 editor_state,
                 downloader_state,
                 action_log: vec![],
+                events_log_receiver: events_log,
+                events_log: vec![],
             },
             Command::batch(commands),
         )
@@ -70,7 +84,22 @@ impl Application for GuiMain {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced::subscription::events().map(Msg::IcedEvent)
+        let rx = self.events_log_receiver.clone();
+        let rx2 = rx.clone();
+        struct Id;
+        let test = iced::subscription::unfold(std::any::TypeId::of::<Id>(), rx2, |rx| async move {
+            block_in_place(|| async {
+                match rx.recv() {
+                    Ok(res) => {
+                        println!("got log, sending log");
+                        (Msg::Log(res.clone()), rx)
+                    }
+                    Err(_) => (Msg::None, rx),
+                }
+            })
+            .await
+        });
+        Subscription::batch(vec![test, iced::subscription::events().map(Msg::IcedEvent)])
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -97,12 +126,19 @@ impl Application for GuiMain {
             }
             Msg::PushAction(action) => self.action_log.push(action),
             Msg::None => {}
+            Msg::Log(event) => {
+                println!("got event");
+                self.events_log.push(dbg!(event));
+                return scrollable::snap_to(
+                    scrollable::Id::new("status_scroll"),
+                    scrollable::RelativeOffset { x: 0.0, y: 1.0 },
+                );
+            }
         };
         Command::none()
     }
 
     fn view(&self) -> iced::Element<'_, Self::Message> {
-        // TODO: align the title to the center
         let title = text(self.title())
             .width(Length::Fill)
             .horizontal_alignment(iced::alignment::Horizontal::Center);
@@ -117,36 +153,41 @@ impl Application for GuiMain {
                 self.downloader_state.tab_label(),
                 self.downloader_state.view(),
             )
-            .set_active_tab(&self.active_tab)
-            .height(Length::FillPortion(3));
+            .set_active_tab(&self.active_tab);
 
         let status_bar = {
-            let actions: Element<'_, Msg> = if !self.action_log.is_empty() {
-                let mut log_column = Column::new().spacing(3);
-                for action in &self.action_log {
-                    let action_text = text(action.to_string());
-                    log_column = log_column.push(action_text);
+            let events: Element<'_, Msg> = if !self.events_log.is_empty() {
+                let mut events_column = Column::new().spacing(3);
+                for event in &self.events_log {
+                    events_column = events_column.push(event.display());
                 }
-                log_column.into()
+                events_column.padding(10).into()
             } else {
-                text("No actions yet!").into()
+                text("no logs to show").width(Length::Fill).into()
             };
-            container(scrollable(actions))
+            container(
+                scrollablefn(events)
+                    .width(Length::Fill)
+                    .id(scrollable::Id::new("status_scroll")),
+            )
         }
-        .height(Length::FillPortion(1))
         .width(Length::Fill)
-        .style(iced::theme::Container::Custom(Box::new(StatusBarContainer)))
-        .padding(10);
+        .style(iced::theme::Container::Custom(Box::new(StatusBarContainer)));
 
-        container(column(vec![
-            title.into(),
-            tabs.into(),
-            horizontal_rule(10).into(),
-            status_bar.into(),
-            horizontal_rule(10).into(),
-        ]))
-        .center_x()
-        .center_y()
+        container(
+            column(vec![
+                title.into(),
+                container(tabs)
+                    .padding(10)
+                    .width(Length::Fill)
+                    .height(Length::FillPortion(3))
+                    .into(),
+                horizontal_rule(10).into(),
+                status_bar.height(Length::FillPortion(1)).into(),
+            ])
+            .spacing(10),
+        )
+        .padding(5)
         .into()
     }
 }
@@ -167,6 +208,7 @@ pub enum Msg {
     IcedEvent(Event),
 
     PushAction(Actions),
+    Log(GuiEvent),
 
     // ? what is the use of this anyways
     #[allow(dead_code)]
@@ -177,18 +219,44 @@ pub enum Msg {
 pub enum Actions {
     // Downloader
     /// Takes search keyword as arg
-    SearchYoutube(String),
+    SearchYoutubeStart(String),
+    StartDownloadFromYoutube(String),
+    WriteTagsToFile(String),
+    DoneInsertIntoDatabase(String),
     Done,
 }
 
 impl std::fmt::Display for Actions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Actions::SearchYoutube(keyword) => {
+            Actions::SearchYoutubeStart(keyword) => {
                 write!(f, "Searching youtube for: {keyword}")
             }
             Actions::Done => write!(f, "Done!"),
+            Actions::StartDownloadFromYoutube(id) => {
+                write!(f, "Downloaded from YouTube: {id}")
+            }
+            Actions::WriteTagsToFile(path) => write!(f, "Wrote tags to file {path}"),
+            Actions::DoneInsertIntoDatabase(id) => {
+                write!(f, "Inserting entries into database, song id is {id}")
+            }
         }
+    }
+}
+
+trait EventsDisplay {
+    type Message;
+
+    fn display(&self) -> Element<Msg>;
+}
+
+impl EventsDisplay for GuiEvent {
+    type Message = Msg;
+
+    fn display(&self) -> Element<Msg> {
+        // LEVEL TIMESTAMP IDENTIFIER MESSAGE
+        let form = format!("{} | {}", self.level.to_string(), self.get_message());
+        text(form).into()
     }
 }
 
@@ -204,7 +272,6 @@ pub trait Tab {
     /// View to be rendered
     fn view(&self) -> Element<'_, Self::Message> {
         let column = Column::new()
-            .spacing(20)
             .push(
                 text(self.title())
                     .size(30)
@@ -216,6 +283,8 @@ pub trait Tab {
         container(column)
             .width(Length::Fill)
             .height(Length::Fill)
+            .center_x()
+            .center_y()
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center)
             .padding(10)

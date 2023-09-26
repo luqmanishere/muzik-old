@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
+use super::database::DbConnection;
 use etcetera::{choose_app_strategy, AppStrategy, AppStrategyArgs};
 use miette::{IntoDiagnostic, Result};
-use muzik_common::database::DbConnection;
 use serde::Deserialize;
 
 #[derive(Deserialize)]

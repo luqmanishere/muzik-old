@@ -8,9 +8,9 @@ edition.workspace = true
 miette = { version = "5" }
 thiserror = { version = "1" }
 sea-orm = { version = "^0", features = [
-    "sqlx-sqlite",
-    "runtime-tokio-rustls",
-    "macros",
+  "sqlx-sqlite",
+  "runtime-tokio-rustls",
+  "macros",
 ] }
 sea-orm-migration = "^0"
 youtube_dl = { version = "0.9", default-features = false, features = ["tokio"] }
@@ -21,6 +21,9 @@ tracing = "0.1"
 walkdir = "2"
 mime_guess = "2"
 strum = { version = "0.25", features = ["derive"] }
+toml = { version = "0.8" }
+etcetera = { version = "0.8" }
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1" }
