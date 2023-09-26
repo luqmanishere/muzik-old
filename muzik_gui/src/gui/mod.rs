@@ -90,10 +90,7 @@ impl Application for GuiMain {
         let test = iced::subscription::unfold(std::any::TypeId::of::<Id>(), rx2, |rx| async move {
             block_in_place(|| async {
                 match rx.recv() {
-                    Ok(res) => {
-                        println!("got log, sending log");
-                        (Msg::Log(res.clone()), rx)
-                    }
+                    Ok(res) => (Msg::Log(res.clone()), rx),
                     Err(_) => (Msg::None, rx),
                 }
             })
@@ -127,8 +124,7 @@ impl Application for GuiMain {
             Msg::PushAction(action) => self.action_log.push(action),
             Msg::None => {}
             Msg::Log(event) => {
-                println!("got event");
-                self.events_log.push(dbg!(event));
+                self.events_log.push(event);
                 return scrollable::snap_to(
                     scrollable::Id::new("status_scroll"),
                     scrollable::RelativeOffset { x: 0.0, y: 1.0 },

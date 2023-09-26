@@ -76,6 +76,7 @@ fn main() -> Result<()> {
         window: iced::window::Settings {
             size: (1280, 720),
             icon,
+            decorations: false,
             ..Default::default()
         },
         flags: (config, Some(events_rx)),

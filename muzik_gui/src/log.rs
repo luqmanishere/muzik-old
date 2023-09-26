@@ -39,7 +39,6 @@ where
             fields,
         };
         self.sender.send(gui_event).expect("receiving end works");
-        println!("i am called");
     }
 }
 
