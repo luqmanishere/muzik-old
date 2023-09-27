@@ -9,6 +9,7 @@ use iced::{
 };
 use iced_aw::{card, modal, Split, TabLabel};
 use muzik_common::{
+    audio_file_name::{get_audio_file_name_from_song, get_audio_file_name_from_song_ytdl_template},
     config::Config,
     data::{Song, Source},
     database::DbConnection,
@@ -547,7 +548,6 @@ impl Tab for DownloaderTab {
 
                         debug!("{:?}", &song);
                         let db = self.db.clone();
-                        // Command::perform(async {}, |_|Msg::PushAction(Actions::DoneInsertIntoDatabase(())))
                         return Command::perform(
                             async move {
                                 match db.insert_from_gui_song(song.clone()).await {
@@ -569,15 +569,14 @@ impl Tab for DownloaderTab {
                     if res {
                         match song.source {
                             Source::Youtube => {
-                                let db_id = song.id.expect("youtube_id exists");
                                 let youtube_id = song.youtube_id.clone().expect("exists");
-                                let title = song.get_title_string();
-                                let artists = song.get_artists_string();
                                 let music_dir = self.config.get_music_dir();
                                 let cookies = self.config.cookies.clone();
 
-                                let filename_format =
-                                    format!("{} - {} [{}].%(ext)s", title, artists, db_id);
+                                let filename_format = get_audio_file_name_from_song_ytdl_template(
+                                    &self.config.audio_file_name_format,
+                                    &song,
+                                );
 
                                 let song = song.clone();
                                 return Command::perform(
@@ -615,10 +614,12 @@ impl Tab for DownloaderTab {
                         let db_id = song.id.expect("youtube_id exists");
                         let title = song.get_title_string();
                         let artists = song.get_artists_string();
-                        let path = self
-                            .config
-                            .get_music_dir()
-                            .join(format!("{} - {} [{}].opus", title, artists, db_id));
+                        let filename = get_audio_file_name_from_song(
+                            &self.config.audio_file_name_format,
+                            &song,
+                            Some("opus".to_string()),
+                        );
+                        let path = self.config.get_music_dir().join(filename);
                         let db = self.db.clone();
 
                         // properly set the path of the song

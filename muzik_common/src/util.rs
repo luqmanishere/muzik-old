@@ -110,7 +110,7 @@ pub fn download_from_youtube(
     output_dir: String,
     format: String,
     cookies: Option<PathBuf>,
-) -> Result<YoutubeDlOutput, youtube_dl::Error> {
+) -> Result<YoutubeDlOutput, YoutubeError> {
     if let Some(cookie) = cookies {
         println!("cookie found");
         YoutubeDl::new(&id)
@@ -124,8 +124,8 @@ pub fn download_from_youtube(
             .output_template(&format)
             .cookies(cookie.display().to_string())
             .extract_audio(true)
-            // TODO: fix downloads
             .run()
+            .map_err(|e| YoutubeError::YoutubeDl(e))
     } else {
         YoutubeDl::new(id)
             .youtube_dl_path("yt-dlp")
@@ -136,9 +136,9 @@ pub fn download_from_youtube(
             .extra_arg("all")
             .output_directory(output_dir)
             .output_template(format)
-            // TODO: fix downloads
             .extract_audio(true)
             .run()
+            .map_err(|e| YoutubeError::YoutubeDl(e))
     }
 }
 

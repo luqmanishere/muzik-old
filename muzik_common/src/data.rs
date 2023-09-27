@@ -155,6 +155,14 @@ impl Song {
         }
     }
 
+    pub fn get_id_string(&self) -> String {
+        if let Some(id) = self.id.as_ref() {
+            id.to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
     /// Returns the title, or Unknown if none
     pub fn get_title_string(&self) -> String {
         if let Some(title) = self.title.as_ref() {
@@ -171,6 +179,26 @@ impl Song {
                 .map(|a| a.name.clone())
                 .collect::<Vec<_>>()
                 .join("; ")
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    pub fn get_albums_string(&self) -> String {
+        if let Some(albums) = self.albums.as_ref() {
+            albums
+                .iter()
+                .map(|a| a.name.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    pub fn get_youtube_id_string(&self) -> String {
+        if let Some(youtube_id) = self.youtube_id.as_ref() {
+            youtube_id.to_string()
         } else {
             "Unknown".to_string()
         }

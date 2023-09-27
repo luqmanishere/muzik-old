@@ -6,8 +6,6 @@ edition.workspace = true
 
 [dependencies]
 muzik_common = { path = "../muzik_common" }
-eyre = "0.6"
-youtube_dl = { version = "0.8", default-features = false, features = ["tokio"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
@@ -18,7 +16,6 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 image = "0.24"
 reqwest = { version = "0.11", features = ["blocking"] }
-directories = "5"
 lofty = { version = "0.15" }
 cursive = { version = "0.20", default-features = false, features = [
     "crossterm-backend",
@@ -26,7 +23,6 @@ cursive = { version = "0.20", default-features = false, features = [
 ] }
 cursive-tabs = "^0"
 tracing-appender = "0.2"
-toml = "0.7"
 serde = { version = "1", features = ["derive"] }
 sea-orm = { version = "^0", features = [
     "sqlx-sqlite",
@@ -38,3 +34,4 @@ async-trait = "0.1"
 crossbeam-channel = "0.5"
 walkdir = "2"
 mime_guess = "2"
+miette = "5"

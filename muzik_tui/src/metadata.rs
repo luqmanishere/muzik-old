@@ -5,15 +5,21 @@ use cursive::{
     views::{Dialog, EditView, LinearLayout, SelectView, TextView},
     Cursive,
 };
-use youtube_dl::SingleVideo;
+use muzik_common::util::youtube_dl::SingleVideo;
 
 use super::event_runner::{DownloadMetadataInput, Event};
 
 pub fn draw_list_confirm_box(siv: &mut Cursive, video_list: Vec<SingleVideo>, tx: Sender<Event>) {
-    let iter = video_list
-        .iter()
-        .enumerate()
-        .map(|(ind, f)| (format!("{} - {}", f.title, f.channel.clone().unwrap()), ind));
+    let iter = video_list.iter().enumerate().map(|(ind, f)| {
+        (
+            format!(
+                "{} - {}",
+                f.title.clone().unwrap_or("Unknown".to_string()),
+                f.channel.clone().unwrap()
+            ),
+            ind,
+        )
+    });
     let mut list = SelectView::new();
     list.add_all(iter);
     let layout = LinearLayout::vertical()
@@ -56,7 +62,7 @@ pub fn draw_metadata_yt_sync(siv: &mut Cursive, video: SingleVideo, tx: Sender<E
     let right = LinearLayout::vertical()
         .child(
             EditView::new()
-                .content(title)
+                .content(title.unwrap_or("Unknown".to_string()))
                 .with_name(title_box_name.clone())
                 .min_width(30),
         )

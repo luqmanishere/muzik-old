@@ -4,10 +4,11 @@ use cursive::{
     Cursive, CursiveExt,
 };
 use cursive_tabs::TabPanel;
-use eyre::Result;
+use miette::{IntoDiagnostic, Result};
+use muzik_common::config::ReadConfig;
 use tracing::error;
 
-use crate::{config::ReadConfig, download, editor, event_runner};
+use crate::{download, editor, event_runner};
 
 use crate::event_runner::Event;
 
@@ -67,7 +68,7 @@ pub async fn run_tui() -> Result<()> {
             .with_name("Editor"),
     );
     tab_panel.add_tab(download::draw_download_tab(&mut siv, tab_panel_tx).with_name("Download"));
-    tab_panel.set_active_tab("Editor")?;
+    tab_panel.set_active_tab("Editor").into_diagnostic()?;
     let panel = Panel::new(
         OnEventView::new(tab_panel.with_name("tab_panel"))
             .on_event('1', |siv: &mut Cursive| {

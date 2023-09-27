@@ -5,7 +5,7 @@ use cursive::{
     views::{Dialog, EditView, LinearLayout, NamedView, Panel, SelectView, TextView},
     Cursive,
 };
-use youtube_dl::SingleVideo;
+use muzik_common::util::youtube_dl::SingleVideo;
 
 use super::event_runner::{DownloadMetadataInput, Event};
 
@@ -65,7 +65,7 @@ pub fn draw_metadata_editor(siv: &mut Cursive, song: SingleVideo, tx: Sender<Eve
     let right = LinearLayout::vertical()
         .child(
             EditView::new()
-                .content(title)
+                .content(title.unwrap_or("Unknown".to_string()))
                 .with_name("title_input")
                 .min_width(30),
         )

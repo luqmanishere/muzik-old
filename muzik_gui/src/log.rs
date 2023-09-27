@@ -10,7 +10,7 @@ pub struct StatusLayer {
 
 impl StatusLayer {
     pub fn new(tx: Sender<GuiEvent>) -> Self {
-        (Self { sender: tx })
+        Self { sender: tx }
     }
 }
 

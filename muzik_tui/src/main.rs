@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 
-use eyre::Result;
+use miette::Result;
 use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{filter, fmt, prelude::__tracing_subscriber_SubscriberExt, Layer};
 
-mod config;
 mod download;
 mod editor;
 mod event_runner;

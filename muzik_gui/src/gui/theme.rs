@@ -1,7 +1,6 @@
 use iced::{
     color,
-    widget::{button, container, row},
-    BorderRadius, Color, Theme,
+    widget::{button, container}, Color, Theme,
 };
 
 pub struct LocalButton;

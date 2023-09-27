@@ -1,10 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use iced::{
-    window::{icon, Icon},
-    Application, Settings,
-};
+use iced::{window::icon, Application, Settings};
 use miette::{IntoDiagnostic, Result};
 use muzik_common::config::ReadConfig;
 use tracing::info;
@@ -40,7 +37,6 @@ fn main() -> Result<()> {
                     .with_default_directive(filter::LevelFilter::INFO.into())
                     .from_env_lossy(),
             ),
-            //status_layer,
         )
         .with(
             fmt::Layer::new()
@@ -76,7 +72,7 @@ fn main() -> Result<()> {
         window: iced::window::Settings {
             size: (1280, 720),
             icon,
-            decorations: false,
+            decorations: true,
             ..Default::default()
         },
         flags: (config, Some(events_rx)),

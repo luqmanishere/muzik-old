@@ -5,19 +5,20 @@ use cursive::{
     views::{Dialog, SelectView, TextView},
     CbSink, Cursive,
 };
-use eyre::{Context, Result};
+use miette::{IntoDiagnostic, Result};
 use muzik_common::{
+    config::Config,
     database::AppSong,
     entities::*,
     tags,
-    util::{download_from_youtube, search_youtube, search_youtube_playlist},
+    util::{
+        download_from_youtube, search_youtube, search_youtube_playlist, youtube_dl::SingleVideo,
+    },
 };
 use tracing::{debug, error, info, instrument, warn};
-use youtube_dl::SingleVideo;
 
 use crate::download::draw_metadata_editor;
 
-use super::config::Config;
 use super::metadata::draw_list_confirm_box;
 use super::metadata::draw_metadata_yt_sync;
 
@@ -61,10 +62,12 @@ impl EventRunner {
                 // IDK how this works but ok
                 self.cb_sink
                     .send(Box::new(move |siv: &mut Cursive| {
-                        let items = entries
-                            .iter()
-                            .enumerate()
-                            .map(|(_ind, e)| (e.title.to_string(), e.to_owned()));
+                        let items = entries.iter().enumerate().map(|(_ind, e)| {
+                            (
+                                e.title.clone().unwrap_or("Unknown".to_string()).to_string(),
+                                e.to_owned(),
+                            )
+                        });
                         siv.call_on_name(
                             "result_selectview",
                             |view: &mut SelectView<SingleVideo>| {
@@ -77,7 +80,7 @@ impl EventRunner {
                 self.notify_ui(format!("Done searching for: {}", kw));
             }
             // Err(e) => return Err(e.wrap_err("error while searching youtube")),
-            Err(e) => return Err(eyre::eyre!({ e })),
+            Err(e) => return Err(e.into()),
         }
         Ok(EventLoopAction::Continue)
     }
@@ -149,14 +152,18 @@ impl EventRunner {
         match tags::write_tags(filename.into(), &song).await {
             Ok(_) => {
                 info!("wrote tags to file successfully");
-                self.tx.send(Event::ChangeFilename(song))?;
+                self.tx
+                    .send(Event::ChangeFilename(song))
+                    .into_diagnostic()?;
             }
             Err(e) => {
                 if let Some(npath) = song.npath.clone() {
                     match tags::write_tags(npath, &song).await {
                         Ok(_) => {
                             info!("wrote tags to file successfully");
-                            self.tx.send(Event::ChangeFilename(song))?;
+                            self.tx
+                                .send(Event::ChangeFilename(song))
+                                .into_diagnostic()?;
                         }
                         Err(e) => {
                             error!("error writing tags: {}", e);
@@ -177,7 +184,9 @@ impl EventRunner {
             .insert_from_app_song(song.clone())
             .await?;
 
-        self.tx.send(Event::YoutubeDownload(song))?;
+        self.tx
+            .send(Event::YoutubeDownload(song))
+            .into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 
@@ -191,8 +200,8 @@ impl EventRunner {
         {
             Ok(_) => {
                 info!("updated song in database");
-                self.tx.send(Event::UpdateTags(song))?;
-                self.tx.send(Event::UpdateLocalDatabase)?;
+                self.tx.send(Event::UpdateTags(song)).into_diagnostic()?;
+                self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
             }
             Err(e) => {
                 error!("failed to update song in database: {}", e);
@@ -214,7 +223,7 @@ impl EventRunner {
             Ok(_) => {
                 info!("deleted song from database");
                 std::fs::remove_file(song.path.clone().unwrap()).unwrap_or_default();
-                self.tx.send(Event::UpdateLocalDatabase)?;
+                self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
             }
             Err(e) => {
                 error!("can't delete record from db: {}", e);
@@ -226,7 +235,7 @@ impl EventRunner {
     #[instrument(skip_all, fields(song.yt_id))]
     async fn change_filename(&self, song: AppSong) -> Result<EventLoopAction> {
         if let Some(npath) = song.npath {
-            std::fs::rename(song.path.as_ref().unwrap(), npath)?;
+            std::fs::rename(song.path.as_ref().unwrap(), npath).into_diagnostic()?;
         } else {
             debug!("no path changes needed");
         }
@@ -250,7 +259,11 @@ impl EventRunner {
 
                 if let Ok(videos) = videos {
                     for vid in videos {
-                        debug!("got {} - {}", vid.title, vid.channel.clone().unwrap());
+                        debug!(
+                            "got {} - {}",
+                            vid.title.clone().unwrap_or("Unknown".to_string()),
+                            vid.channel.clone().unwrap()
+                        );
                         debug!(
                             "found in database: {}",
                             self.check_yt_duplicate(vid.id.clone())
@@ -266,7 +279,9 @@ impl EventRunner {
                                     &playlist_id
                                 );
                                 let song = song.with_yt_playlist_id(Some(playlist_id.clone()));
-                                self.tx.send(Event::UpdateSongDatabase(song))?;
+                                self.tx
+                                    .send(Event::UpdateSongDatabase(song))
+                                    .into_diagnostic()?;
                             } else {
                                 debug!("yt id {} has playlist {}", vid.id.clone(), playlist_id);
                             }
@@ -338,7 +353,7 @@ impl EventRunner {
                                 .stdout(std::process::Stdio::null())
                                 .stderr(std::process::Stdio::null())
                                 .status()
-                                .wrap_err("failed to execute command opusinfo")?;
+                                .into_diagnostic()?;
                             match opusinfo.code() {
                                 Some(code) => {
                                     if code != 0 {
@@ -385,13 +400,14 @@ impl EventRunner {
             .config
             .db_new
             .get_all_songs(self.config.music_dir.clone())
-            .await
-            .wrap_err("failed to get song list")?;
+            .await?;
 
         for song in song_list {
             let path = song.path.as_ref().unwrap().clone();
             if !path.exists() {
-                self.tx.send(Event::YoutubeDownload(song))?;
+                self.tx
+                    .send(Event::YoutubeDownload(song))
+                    .into_diagnostic()?;
             }
         }
         Ok(EventLoopAction::Continue)
@@ -406,10 +422,14 @@ impl EventRunner {
             .get_all_songs(self.config.music_dir.clone())
             .await?;
         self.state.song_list = Some(song_list);
-        self.tx.send(Event::UpdateEditorSongSelectView)?;
-        self.tx.send(Event::UpdateEditorMetadataSelectView(
-            self.state.song_index.unwrap_or(0),
-        ))?;
+        self.tx
+            .send(Event::UpdateEditorSongSelectView)
+            .into_diagnostic()?;
+        self.tx
+            .send(Event::UpdateEditorMetadataSelectView(
+                self.state.song_index.unwrap_or(0),
+            ))
+            .into_diagnostic()?;
         self.notify_ui("updated local database".to_string());
         Ok(EventLoopAction::Continue)
     }
@@ -562,11 +582,16 @@ impl EventRunner {
         self.cb_sink
             .send(Box::new(move |siv: &mut Cursive| {
                 let text = if !is_existing {
-                    format!("Title: {}\nChannel:{}\nConfirm to edit?", title, channel)
+                    format!(
+                        "Title: {}\nChannel:{}\nConfirm to edit?",
+                        title.clone().unwrap_or("Unknown".to_string()),
+                        channel
+                    )
                 } else {
                     format!(
                         "Title: {}\nChannel:{}\nIs Existing: Yes\nConfirm to edit?",
-                        title, channel
+                        title.clone().unwrap_or("Unknown".to_string()),
+                        channel
                     )
                 };
                 let confirm = Dialog::text(text).dismiss_button("Cancel").button(
@@ -621,7 +646,9 @@ impl EventRunner {
         // as a precaution
         song.compute_filename();
 
-        self.tx.send(Event::InsertSongDatabase(song))?;
+        self.tx
+            .send(Event::InsertSongDatabase(song))
+            .into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 
@@ -640,7 +667,7 @@ impl EventRunner {
             .db_new
             .insert_song_artist(artist_id, song_id)
             .await?;
-        self.tx.send(Event::UpdateLocalDatabase)?;
+        self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 
@@ -670,7 +697,7 @@ impl EventRunner {
 
             self.config.db_new.delete_song_artist(old_artist_id).await?;
         }
-        self.tx.send(Event::UpdateLocalDatabase)?;
+        self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 
@@ -700,7 +727,7 @@ impl EventRunner {
 
             self.config.db_new.delete_song_album(old_album_id).await?;
         }
-        self.tx.send(Event::UpdateLocalDatabase)?;
+        self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 
@@ -720,7 +747,7 @@ impl EventRunner {
             .db_new
             .insert_song_album(album_id, song_id)
             .await?;
-        self.tx.send(Event::UpdateLocalDatabase)?;
+        self.tx.send(Event::UpdateLocalDatabase).into_diagnostic()?;
         Ok(EventLoopAction::Continue)
     }
 

@@ -2,20 +2,19 @@ use std::sync::Arc;
 
 use crossbeam_channel::Receiver;
 use iced::{
-    futures::SinkExt,
     keyboard::{self, KeyCode, Modifiers},
     theme::Theme,
     widget::{
         column, container, horizontal_rule, scrollable as scrollablefn,
-        scrollable::{self, RelativeOffset},
-        text, vertical_space, Column,
+        scrollable::{self},
+        text, Column,
     },
     Application, Command, Element, Event, Length, Subscription,
 };
 use iced_aw::{TabLabel, Tabs};
 use muzik_common::{config::Config, database::DbConnection};
 use tokio::task::block_in_place;
-use tracing::error;
+
 
 use crate::log::GuiEvent;
 
@@ -29,8 +28,6 @@ mod downloader;
 mod editor;
 mod multi_input;
 mod theme;
-
-struct StatusScroll;
 
 /// GUI start point
 #[allow(dead_code)]
@@ -217,9 +214,6 @@ pub enum Actions {
     // Downloader
     /// Takes search keyword as arg
     SearchYoutubeStart(String),
-    StartDownloadFromYoutube(String),
-    WriteTagsToFile(String),
-    DoneInsertIntoDatabase(String),
     Done,
 }
 
@@ -230,13 +224,6 @@ impl std::fmt::Display for Actions {
                 write!(f, "Searching youtube for: {keyword}")
             }
             Actions::Done => write!(f, "Done!"),
-            Actions::StartDownloadFromYoutube(id) => {
-                write!(f, "Downloaded from YouTube: {id}")
-            }
-            Actions::WriteTagsToFile(path) => write!(f, "Wrote tags to file {path}"),
-            Actions::DoneInsertIntoDatabase(id) => {
-                write!(f, "Inserting entries into database, song id is {id}")
-            }
         }
     }
 }
