@@ -15,7 +15,6 @@ use iced_aw::{TabLabel, Tabs};
 use muzik_common::{config::Config, database::DbConnection};
 use tokio::task::block_in_place;
 
-
 use crate::log::GuiEvent;
 
 use self::{
@@ -146,6 +145,7 @@ impl Application for GuiMain {
                 self.downloader_state.tab_label(),
                 self.downloader_state.view(),
             )
+            .tab_bar_height(Length::Shrink)
             .set_active_tab(&self.active_tab);
 
         let status_bar = {

@@ -151,6 +151,8 @@ mod tests {
         );
         assert_eq!(format_manual, format_fn, "format generated: {}", format_fn)
     }
+
+    #[test]
     fn test_get_audio_file_name_from_song_predownload() {
         let song = Song::new()
             .set_id(1)

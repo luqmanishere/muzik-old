@@ -3,15 +3,20 @@ use std::sync::Arc;
 use iced::{
     alignment,
     widget::{
-        checkbox, column, container, horizontal_rule, image::Handle, row, scrollable, text, Button,
-        Column, Image, Text,
+        checkbox, column, container, horizontal_rule,
+        image::Handle,
+        row,
+        scrollable::{self, Id, RelativeOffset},
+        text, Button, Column, Image, Row, Scrollable, Text,
     },
     Command, Element, Length,
 };
-use iced_aw::{Split, TabLabel};
-use tracing::{debug, error, info, trace};
+use iced_aw::{card, modal, Split, TabLabel};
+use strum::{Display, EnumIter};
+use tracing::{debug, error, info, trace, warn};
 
 use muzik_common::{
+    audio_file_name::get_audio_file_name_from_song,
     config::Config,
     data::{self, load_songs, Song},
     database::DbConnection,
@@ -50,6 +55,12 @@ pub enum EditorMessage {
     SubmitChanges(),
     WriteAfterInsertSong((bool, Song)),
     AfterTagWrite(bool),
+
+    EditPathButton,
+    CancelPathPopup,
+    EditFileOperationPicklist(FileOperation),
+    FilePathOperationReset,
+    AfterPathChangeUpdateDatabase((Option<std::path::PathBuf>, Song)),
 }
 
 pub struct EditorTab {
@@ -66,6 +77,9 @@ pub struct EditorTab {
     artist_text_input: Option<Vec<MultiStringInput<Msg>>>,
     album_text_input: Option<Vec<MultiStringInput<Msg>>>,
     genre_text_input: Option<Vec<MultiStringInput<Msg>>>,
+
+    show_path_editing_modal: bool,
+    path_editing_modal_operation_picklist: Option<FileOperation>,
 }
 
 impl EditorTab {
@@ -87,6 +101,9 @@ impl EditorTab {
                 artist_text_input: None,
                 album_text_input: None,
                 genre_text_input: None,
+
+                show_path_editing_modal: false,
+                path_editing_modal_operation_picklist: None,
             },
             Command::perform(async { load_songs(music_dir, db_conn).await }, |result| {
                 Msg::Editor(EditorMessage::LoadSongs(result))
@@ -150,6 +167,50 @@ impl EditorTab {
             };
         };
     }
+
+    fn path_editing_modal(&self) -> Element<Msg> {
+        let mut main_column = Column::new().padding(5).spacing(10);
+
+        if let Some(operation) = self.path_editing_modal_operation_picklist.as_ref() {
+            match operation {
+                FileOperation::Reset => {
+                    // TODO: this isnt really needed
+                }
+                FileOperation::ChangeFilenameOrder => {
+                    // TODO: UI to change filename with given blocks
+                }
+                FileOperation::Custom => {
+                    // TODO: allow custom names
+                }
+            }
+        } else {
+        }
+
+        // ask mode of change
+        let select_text = text("Select operation:")
+            .width(Length::Fill)
+            .horizontal_alignment(alignment::Horizontal::Center);
+        let change_name_format = Button::new("Naming format").on_press(Msg::Editor(
+            EditorMessage::EditFileOperationPicklist(FileOperation::ChangeFilenameOrder),
+        ));
+        let custom_name = Button::new("Custom name").on_press(Msg::Editor(
+            EditorMessage::EditFileOperationPicklist(FileOperation::Custom),
+        ));
+
+        let button_row = Row::new()
+            .push(change_name_format)
+            .push(custom_name)
+            .spacing(10)
+            .width(Length::Fill);
+        main_column = main_column.push(select_text).push(button_row);
+
+        container(main_column)
+            .align_x(alignment::Horizontal::Center)
+            .width(Length::Fill)
+            .center_y()
+            .center_x()
+            .into()
+    }
 }
 
 impl Tab for EditorTab {
@@ -192,7 +253,7 @@ impl Tab for EditorTab {
             }
 
             if !songs.is_empty() {
-                scrollable(column(songs)).into()
+                Scrollable::new(column(songs)).into()
             } else {
                 text("no songs! try toggeling DB view or adding new entries").into()
             }
@@ -230,21 +291,35 @@ impl Tab for EditorTab {
                 .push(title_input)
                 .push(horizontal_rule(1));
 
-            let path = {
-                let path = if let Some(path) = song.path.as_ref() {
-                    let conv = path.display().to_string();
-                    if !conv.is_empty() && path.exists() {
-                        conv
-                    } else if !conv.is_empty() && !path.exists() {
-                        format!("{} - Not on disk", conv)
+            let path: Element<'_, Msg> = {
+                if let Some(path) = song.path.as_ref() {
+                    let path_as_str = path.display().to_string();
+                    if !path_as_str.is_empty() && path.exists() {
+                        let path = text(path_as_str);
+
+                        let edit_button = Button::new("Edit")
+                            .on_press(Msg::Editor(EditorMessage::EditPathButton));
+                        let reset_name_button = Button::new("Reset Name")
+                            .on_press(Msg::Editor(EditorMessage::FilePathOperationReset));
+
+                        Column::new()
+                            .push(path)
+                            .push(
+                                Row::new()
+                                    .push(edit_button)
+                                    .push(reset_name_button)
+                                    .spacing(10),
+                            )
+                            .spacing(5)
+                            .into()
+                    } else if !path_as_str.is_empty() && !path.exists() {
+                        text(format!("{} - Not on disk", path_as_str)).into()
                     } else {
-                        "No path provided".to_string()
+                        text("No path provided").into()
                     }
                 } else {
-                    "No path provided".to_string()
-                };
-
-                text(format!("Local path: {}", path))
+                    text("No path provided").into()
+                }
             };
             sp_col = sp_col.push(path).push(horizontal_rule(1));
 
@@ -358,7 +433,9 @@ impl Tab for EditorTab {
                 Button::new("Submit").on_press(Msg::Editor(EditorMessage::SubmitChanges()));
             sp_col = sp_col.push(submit_button);
 
-            scrollable(sp_col).into()
+            container(Scrollable::new(sp_col).id(scrollable::Id::new("song_metadata_scroll")))
+                .padding(5)
+                .into()
         } else {
             text("select a song!").into()
         };
@@ -384,7 +461,29 @@ impl Tab for EditorTab {
         .spacing(10);
 
         // return the main container
-        container(row)
+        let underlay = container(row)
+            .center_x()
+            .center_y()
+            .padding([10, 0, 10, 0])
+            .width(Length::Fill);
+
+        let overlay = {
+            if self.show_path_editing_modal {
+                let fields = if let Some(_song) = self.current_app_song.as_ref() {
+                    self.path_editing_modal()
+                } else {
+                    text("how did you get here?").into()
+                };
+                Some(
+                    card(text("Change file path"), fields)
+                        .max_width(500.0)
+                        .on_close(Msg::Editor(EditorMessage::CancelPathPopup)),
+                )
+            } else {
+                None
+            }
+        };
+        container(modal(underlay, overlay))
             .center_x()
             .center_y()
             .padding(10)
@@ -403,18 +502,24 @@ impl Tab for EditorTab {
                     self.current_app_song_image = None;
                     self.reset_input_fields();
                     if let Some(path) = song.path.clone() {
-                        return Command::perform(
-                            async {
-                                match tags::read_picture(path).await {
-                                    Ok(pic) => pic,
-                                    Err(e) => {
-                                        error!("{e}");
-                                        vec![]
+                        return Command::batch(vec![
+                            Command::perform(
+                                async {
+                                    match tags::read_picture(path).await {
+                                        Ok(pic) => pic,
+                                        Err(e) => {
+                                            error!("{e}");
+                                            vec![]
+                                        }
                                     }
-                                }
-                            },
-                            |res| Msg::Editor(EditorMessage::LoadSongImage(res)),
-                        );
+                                },
+                                |res| Msg::Editor(EditorMessage::LoadSongImage(res)),
+                            ),
+                            scrollable::snap_to(
+                                Id::new("song_metadata_scroll"),
+                                RelativeOffset::START,
+                            ),
+                        ]);
                     }
                 }
                 EditorMessage::LoadSongImage(pic) => {
@@ -473,6 +578,10 @@ impl Tab for EditorTab {
                     if let Some(genre_input) = self.genre_text_input.as_mut() {
                         genre_input.pop();
                     }
+                }
+                EditorMessage::EditPathButton => {
+                    self.show_path_editing_modal = true;
+                    self.path_editing_modal_operation_picklist = Some(FileOperation::Reset);
                 }
                 EditorMessage::SubmitChanges() => {
                     // todo: if in database, update. if not in database, add new
@@ -612,6 +721,75 @@ impl Tab for EditorTab {
                 EditorMessage::AfterTagWrite(_res) => {
                     return Command::perform(async {}, |_| Msg::Editor(EditorMessage::ReloadButton))
                 }
+                EditorMessage::CancelPathPopup => self.show_path_editing_modal = false,
+                EditorMessage::EditFileOperationPicklist(pick) => {
+                    self.path_editing_modal_operation_picklist = Some(pick)
+                }
+                EditorMessage::FilePathOperationReset => {
+                    self.show_path_editing_modal = false;
+                    // directly reset file name
+                    if let Some(song) = self.current_app_song.clone() {
+                        if let Some(old_path) = song.path.clone() {
+                            let new_path =
+                                self.config
+                                    .get_music_dir()
+                                    .join(get_audio_file_name_from_song(
+                                        &self.config.audio_file_name_format,
+                                        &song,
+                                        Some("opus".to_string()),
+                                    ));
+
+                            info!("renaming {} to {}", old_path.display(), new_path.display());
+                            return Command::perform(
+                                async {
+                                    match tokio::fs::rename(old_path, &new_path).await {
+                                        Ok(_) => {
+                                            info!("rename success");
+                                            return (Some(new_path), song);
+                                        }
+
+                                        Err(e) => {
+                                            error!("error renaming file: {e}");
+                                            return (None, song);
+                                        }
+                                    }
+                                },
+                                |res| {
+                                    Msg::Editor(EditorMessage::AfterPathChangeUpdateDatabase(res))
+                                },
+                            );
+                        } else {
+                            error!("no path found for: {song:?}");
+                        }
+                    } else {
+                        error!("no song is currently selected");
+                    }
+                }
+                EditorMessage::AfterPathChangeUpdateDatabase((new_path, mut song)) => {
+                    match new_path {
+                        Some(new_path) => {
+                            song.set_path(new_path);
+                            let db = self.db.clone();
+                            return Command::perform(
+                                async move { db.update_song_from_gui_song(song.clone()).await },
+                                |res| {
+                                    match res {
+                                        Ok(_) => {
+                                            info!("updated song after path change");
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "failed to update database after path change: {e}"
+                                            );
+                                        }
+                                    };
+                                    Msg::Editor(EditorMessage::ReloadButton)
+                                },
+                            );
+                        }
+                        None => warn!("no new_path is given, nothing will be done"),
+                    }
+                }
             }
             Command::none()
         } else {
@@ -656,4 +834,11 @@ impl Disp for Song {
                 .into()
         }
     }
+}
+
+#[derive(Clone, Display, EnumIter, Eq, PartialEq, Copy, Debug)]
+pub enum FileOperation {
+    Reset,
+    ChangeFilenameOrder,
+    Custom,
 }

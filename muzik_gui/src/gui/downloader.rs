@@ -311,6 +311,7 @@ impl Tab for DownloaderTab {
             self.source_picklist,
             |sel| Msg::Downloader(DownloaderMsg::SourcePick(sel)),
         );
+
         let mut search_bar = text_input("Search me", &self.search_bar)
             .on_input(|inp| Msg::Downloader(DownloaderMsg::SearchBarInput(inp)));
         let mut search_submit_button = Button::new(text("Submit"));
@@ -611,9 +612,6 @@ impl Tab for DownloaderTab {
                     if result {
                         debug!("previous download succeeded, tagging");
                         let mut song = song.clone();
-                        let db_id = song.id.expect("youtube_id exists");
-                        let title = song.get_title_string();
-                        let artists = song.get_artists_string();
                         let filename = get_audio_file_name_from_song(
                             &self.config.audio_file_name_format,
                             &song,
